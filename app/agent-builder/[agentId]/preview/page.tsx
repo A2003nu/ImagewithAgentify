@@ -185,7 +185,7 @@ function PreviewAgent() {
 
       <CursorGlow />
 
-      <Header previewHeader={true} agentDetail={agentDetail} />
+      <Header previewHeader={true} agentDetail={agentDetail} nodes={agentDetail?.nodes || []} edges={agentDetail?.edges || []} />
 
       <div className="grid grid-cols-3 h-[90vh]">
 

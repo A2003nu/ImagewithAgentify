@@ -1258,7 +1258,7 @@ IMPORTANT: Use the customer data provided above. Do NOT generate fake names, ord
   return (
     <div>
       <CursorGlow />
-      <Header agentDetail={agentDetail} />
+      <Header agentDetail={agentDetail} nodes={addedNodes} edges={nodeEdges} />
 
       <div className="bg-slate-100" style={{ width: "100vw", height: "90vh" }}>
         <ReactFlow
