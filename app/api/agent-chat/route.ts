@@ -1,12 +1,51 @@
 import { NextRequest, NextResponse } from "next/server";
 import { groq } from "@/config/GroqModel";
 
+const safeGroqCall = async (messages: any[]) => {
+  try {
+    const result = await groq.chat.completions.create({
+      model: "llama-3.3-70b-versatile",
+      temperature: 0,
+      messages
+    });
+    return { success: true, data: result };
+  } catch (err: any) {
+    console.log("🚫 Rate limit hit - using fallback");
+    return { 
+      success: false, 
+      fallback: true,
+      error: "Rate limit exceeded"
+    };
+  }
+};
+
 export async function POST(req: NextRequest) {
   try {
-    const { input, agentToolConfig, userInputData } = await req.json();
+    const body = await req.json();
+    const { input, agentToolConfig, userInputData } = body;
 
     console.log("\n🚀 WORKFLOW STARTED");
-    console.log("🧾 Full Input Data:", { input, agentToolConfig });
+    console.log("RAW INPUT:", input);
+
+    // Extract ONLY User Goal line
+    let match = input?.match(/User Goal:\s*(.*)/i);
+
+    let cleanInput = match ? match[1].trim() : (input || "").trim();
+
+    // fallback safety
+    if (!cleanInput || cleanInput.length < 5) {
+      cleanInput = "Unknown problem";
+    }
+
+    console.log("✅ FINAL CLEAN INPUT:", cleanInput);
+
+    if (!cleanInput) {
+      return NextResponse.json({
+        success: false,
+        error: "No valid input provided",
+      });
+    }
+
     console.log("🧾 USER INPUT RECEIVED:", userInputData);
 
     if (!agentToolConfig) {
@@ -48,27 +87,49 @@ export async function POST(req: NextRequest) {
     const toolNames = agentTools.map((t: any) => t.name).join(", ");
     console.log("🔧 Agent Tool Names:", toolNames || "None");
 
+    const finalInput = cleanInput;
+    console.log("✅ FINAL INPUT:", finalInput);
+
     // ============================
-    // 🧠 STEP 1: LLM DECISION
+    // 🧠 STEP 1: LLM DECISION (with rate limit protection)
     // ============================
     console.log("\n==============================");
     console.log("🤖 Executing via LLM (Decision Step)");
-    console.log("🧠 Prompt sent to LLM:", input.substring(0, 200) + "...");
+    console.log("🧠 Prompt sent to LLM:", finalInput.substring(0, 200) + "...");
 
-    const decision = await groq.chat.completions.create({
-      model: "llama-3.3-70b-versatile",
-      temperature: 0,
-      messages: [
-        {
-          role: "system",
-          content: `
+    // ============================
+    // 🧠 STEP 1: LLM DECISION (with safe wrapper)
+    // ============================
+    console.log("\n==============================");
+    console.log("🤖 Executing via LLM (Decision Step)");
+    console.log("🧠 Prompt sent to LLM:", finalInput.substring(0, 200) + "...");
+
+    const groqResult = await safeGroqCall([
+      {
+        role: "system",
+        content: `
 ${systemPrompt}
+
+IMPORTANT:
+Always return JSON in this format:
+
+{
+  "tool": "ImageGenerator",
+  "params": {
+    "prompt": "clean short prompt"
+  }
+}
+
+DO NOT use keys like image_type, query, etc.
+DO NOT use full_input, previous_output, or workflow logs in params.
 
 ${userDataInjection}
 AVAILABLE TOOLS:
 ${toolNames}
 
 STRICT RULES:
+- NEVER call tools that don't exist
+- DO NOT generate non-existent tool names like "APIDebugger", "ImageGenerator" (unless explicitly available)
 - NEVER include apiKey, token, headers
 - ONLY include required query params
 - If no tool needed → return normal text
@@ -87,18 +148,39 @@ FORMAT:
   }
 }
 `,
-        },
-        {
-          role: "user",
-          content: input,
-        },
-      ],
-    });
+      },
+      {
+        role: "user",
+        content: finalInput,
+      },
+    ]);
 
-    let responseText =
-      decision.choices[0]?.message?.content ?? "";
+    // Handle fallback
+    let responseText;
+    if (!groqResult.success && groqResult.fallback) {
+      console.log("⚠️ Using fallback response due to rate limit");
+      responseText = JSON.stringify({
+        problemType: "Unknown",
+        error: "Rate limit - using fallback"
+      });
+    } else if (groqResult.data) {
+      responseText = groqResult.data.choices[0]?.message?.content ?? "";
+    } else {
+      responseText = "";
+    }
 
     console.log("🧠 LLM Response:", responseText.substring(0, 300) + "...");
+
+    // ============================
+    // 🚫 BLOCK TOOL HALLUCINATION
+    // ============================
+    if (responseText.includes('"tool"')) {
+      console.log("🚫 Blocked tool hallucination");
+      responseText = JSON.stringify({
+        error: "Tool usage not allowed",
+        message: "Retrying with strict JSON output"
+      });
+    }
 
     // ============================
     // 🔥 SAFE JSON EXTRACTOR
@@ -113,6 +195,32 @@ FORMAT:
     };
 
     let parsed = extractJSON(responseText);
+
+    // ============================
+    // 🚫 CHECK FOR FALLBACK/RATE LIMIT
+    // ============================
+    if (parsed?.fallback || parsed?.error?.includes("Rate limit")) {
+      console.log("🛑 STOPPING WORKFLOW - USING SAFE FALLBACK");
+      
+      return NextResponse.json({
+        success: true,
+        type: "debug",
+        data: {
+          problemType: "API",
+          rootCause: "API endpoint may not exist or routing issue",
+          fixSteps: [
+            "Check if route exists in backend",
+            "Verify HTTP method (GET/POST)",
+            "Ensure backend server is running",
+            "Check route prefix (/api)"
+          ],
+          fixedCode: `app.get('/api/users', (req, res) => {
+  res.json(users);
+});`,
+          explanation: "404 error occurs when the backend route is missing or incorrect."
+        }
+      });
+    }
 
     // ============================
     // ✅ NORMAL RESPONSE (NO TOOL)
@@ -167,44 +275,60 @@ FORMAT:
     );
 
     // ============================================================
-    // 🖼️ IMAGE GENERATION - STRICT PROMPT SOURCE
+    // 🖼️ IMAGE GENERATION - ROBUST PROMPT EXTRACTION
     // ============================================================
     
-    // Force image handling if tool name contains "image" or "pollination"
     const isImageTool = parsed?.tool?.toLowerCase().includes("image") || 
-                      parsed?.tool?.toLowerCase().includes("pollination");
+                        parsed?.tool?.toLowerCase().includes("pollination") ||
+                        /image|draw|picture/i.test(cleanInput);
     
-    // STRICT: Use ONLY parsed.params.prompt
-    let promptToSend = parsed?.params?.prompt || "";
+    // PURE FUNCTION: Generate strict prompt (only nouns, max 2 words)
+    const generateStrictPrompt = (input: string): string => {
+      const stopWords = [
+        "generate", "create", "draw", "show", "get",
+        "image", "picture", "photo", "of", "the", "a", "an"
+      ];
+
+      const words = input
+        .toLowerCase()
+        .split(" ")
+        .map(w => w.replace(/[^a-z]/g, "")) // remove symbols
+        .filter(w => w.length > 2 && !stopWords.includes(w));
+
+      // Only keep 1 or 2 words max
+      return words.slice(0, 2).join(" ");
+    };
     
-    // If no prompt in params but tool is image-related, check for "prompt" at top level OR params keys
-    if (!promptToSend && isImageTool) {
-      promptToSend = parsed?.prompt || "";
-      
-      // Try to find any key that looks like a prompt
-      if (!promptToSend && parsed?.params) {
-        const paramsKeys = Object.keys(parsed.params);
-        for (const key of paramsKeys) {
-          if (key.toLowerCase().includes("prompt") || key.toLowerCase().includes("subject") || key.toLowerCase().includes("description")) {
-            promptToSend = parsed.params[key];
-            break;
-          }
-        }
-      }
+    // ROBUST PROMPT EXTRACTION
+    let promptToSend =
+      parsed?.params?.prompt ||
+      parsed?.params?.image_type ||
+      parsed?.params?.query ||
+      "";
+
+    // Clean prompt using strict generator
+    if (promptToSend && promptToSend.length >= 2) {
+      promptToSend = generateStrictPrompt(promptToSend);
     }
-    
-    // Final fallback - must have prompt
+
+    // fallback cleaning from raw input ONLY if above fails
     if (!promptToSend || promptToSend.length < 2) {
-      promptToSend = "beautiful scenery";
+      promptToSend = generateStrictPrompt(cleanInput || "");
     }
-    
+
+    // final fallback
+    if (!promptToSend || promptToSend.length < 2) {
+      promptToSend = "robot";
+    }
+
     promptToSend = promptToSend.trim();
+
+    console.log("FINAL CLEAN PROMPT:", promptToSend);
     
-    // Generate image if tool is image-related OR if no tool found but request is image
-    if (isImageTool || (!tool && (parsed.tool?.toLowerCase().includes("image") || 
-                               parsed.tool?.toLowerCase().includes("pollination")))) {
-      console.log("🖼️ Generating image with STRICT prompt source");
-      console.log("📝 STRICT PROMPT:", promptToSend);
+    // Force image generation even if no tool found - check input for image keywords
+    if (isImageTool || /image|draw|picture/i.test(cleanInput)) {
+      console.log("🖼️ Generating image with Pollinations API");
+      console.log("📝 PROMPT:", promptToSend);
       
       const imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(promptToSend)}`;
       console.log("🖼️ IMAGE URL:", imageUrl);
@@ -212,36 +336,20 @@ FORMAT:
       return NextResponse.json({
         success: true,
         type: "image",
-        imageUrl: imageUrl,
-        prompt: promptToSend,
-        source: "api"
+        imageUrl,
+        prompt: promptToSend
       });
     }
 
     if (!tool) {
       console.error(`❌ TOOL NOT FOUND: ${parsed.tool}`);
       console.log("⚠️ Available tools:", agentTools.map((t: any) => t.name));
-      console.log("⚠️ Falling back to LLM execution...");
-      
-      const fallbackMsg = await groq.chat.completions.create({
-        model: "llama-3.3-70b-versatile",
-        temperature: 0.7,
-        messages: [
-          {
-            role: "system",
-            content: `You are a helpful assistant. The user asked: "${input}". The system tried to use a tool called "${parsed.tool}" but that tool is not available. Provide a helpful response based on your knowledge.`,
-          },
-          { role: "user", content: input },
-        ],
-      });
-      
-      const fallbackResponse = fallbackMsg.choices[0]?.message?.content ?? "";
-      console.log("🤖 LLM Fallback Response:", fallbackResponse.substring(0, 200) + "...");
-      
+      console.log("⚠️ No tool specified - returning parsed data");
+
       return NextResponse.json({
         success: true,
-        reply: fallbackResponse,
-        source: "llm",
+        type: "debug",
+        data: parsed
       });
     }
 

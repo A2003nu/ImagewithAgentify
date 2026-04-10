@@ -937,6 +937,11 @@ function AgentBuilder() {
         body: JSON.stringify(requestBody),
       })
 
+      if (!res.ok) {
+        toast.error(`Server error: ${res.status}`, { id: loadingToastId })
+        return
+      }
+
       const data = await res.json()
 
       if (!data.success) {
@@ -1350,12 +1355,26 @@ IMPORTANT: Use the customer data provided above. Do NOT generate fake names, ord
                         {log.imageUrl ? (
                           <div className="mt-2">
                             <img 
-                              src={log.imageUrl} 
+                              src={log.imageUrl}
                               alt={log.output || "Generated image"} 
                               className="max-w-full rounded-lg border border-gray-200"
                               style={{ maxHeight: "300px", objectFit: "contain" }}
+                              onError={(e) => {
+                                e.currentTarget.onerror = null;
+                                e.currentTarget.src = "/placeholder-image.svg";
+                              }}
                             />
                             <p className="text-xs text-gray-500 mt-1">{log.output}</p>
+                            <a
+                              href={log.imageUrl}
+                              download="generated-image.png"
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              style={{ color: "blue", textDecoration: "underline" }}
+                              className="text-sm mt-2 inline-block"
+                            >
+                              Download Image
+                            </a>
                           </div>
                         ) : (
                           <p className={`text-sm whitespace-pre-wrap break-words ${
