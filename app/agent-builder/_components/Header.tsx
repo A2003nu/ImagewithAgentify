@@ -30,14 +30,22 @@ type Props = {
     previewHeader?: boolean,
     nodes?: FlowNode[];
     edges?: FlowEdge[];
+    onPreviewCode?: (code: string) => void;
 }
 
-function Header({agentDetail, previewHeader=false, nodes = [], edges = []}:Props) {
+function Header({agentDetail, previewHeader=false, nodes = [], edges = [], onPreviewCode}:Props) {
   
   const handleCodeClick = () => {
     const code = generatePythonCode(nodes, edges);
     downloadPythonFile(code, `${agentDetail?.name || "agentify"}_workflow.py`);
   }
+
+  const handlePreviewClick = () => {
+    const code = generatePythonCode(nodes, edges);
+    if (onPreviewCode) {
+      onPreviewCode(code);
+    }
+  };
 
   return (
    <div className="w-full p-3 flex items-center justify-between">
@@ -48,9 +56,20 @@ function Header({agentDetail, previewHeader=false, nodes = [], edges = []}:Props
 
     <div className="flex items-center gap-3">
         <Button variant={'ghost'} onClick={handleCodeClick}><Code2 />Code</Button>
-       {!previewHeader? <Link href={`/agent-builder/${agentDetail?.agentId}/preview`}>
-        <Button><Play/>Preview</Button>
-        </Link>:
+       {!previewHeader? (
+        <>
+          <Button variant="outline" onClick={handlePreviewClick}>
+            <Play className="h-4 w-4 mr-2" />
+            Preview Code
+          </Button>
+          <Link href={`/agent-builder/${agentDetail?.agentId}/preview`}>
+            <Button>
+              <Play className="h-4 w-4 mr-2" />
+              Run Workflow
+            </Button>
+          </Link>
+        </>
+       ):
         <Link href={`/agent-builder/${agentDetail?.agentId}`}>
         <Button variant={'outline'}><X />Close Preview</Button>
         </Link>}

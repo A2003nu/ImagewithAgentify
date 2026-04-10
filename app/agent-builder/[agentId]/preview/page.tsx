@@ -13,6 +13,7 @@ import axios from "axios"
 import { Button } from "@/components/ui/button"
 import { RefreshCcwIcon } from "lucide-react"
 import ChatUi from "./_components/ChatUi"
+import CodePreviewModal from "@/components/CodePreviewModal"
 
 function PreviewAgent() {
 
@@ -22,6 +23,8 @@ function PreviewAgent() {
   const [agentDetail, setAgentDetail] = useState<Agent | undefined>()
   const [flowConfig, setFlowConfig] = useState<any>(null)
   const [loading, setLoading] = useState(false)
+  const [showCodePreview, setShowCodePreview] = useState(false)
+  const [generatedCode, setGeneratedCode] = useState("")
 
   const updateAgentToolConfig = useMutation(api.agent.UpdateAgentToolConfigs)
 
@@ -185,7 +188,16 @@ function PreviewAgent() {
 
       <CursorGlow />
 
-      <Header previewHeader={true} agentDetail={agentDetail} nodes={agentDetail?.nodes || []} edges={agentDetail?.edges || []} />
+      <Header 
+        previewHeader={true} 
+        agentDetail={agentDetail} 
+        nodes={agentDetail?.nodes || []} 
+        edges={agentDetail?.edges || []}
+        onPreviewCode={(code) => {
+          setGeneratedCode(code);
+          setShowCodePreview(true);
+        }} 
+      />
 
       <div className="grid grid-cols-3 h-[90vh]">
 
@@ -246,6 +258,12 @@ function PreviewAgent() {
         </div>
 
       </div>
+
+      <CodePreviewModal
+        isOpen={showCodePreview}
+        onClose={() => setShowCodePreview(false)}
+        code={generatedCode}
+      />
 
     </div>
   )

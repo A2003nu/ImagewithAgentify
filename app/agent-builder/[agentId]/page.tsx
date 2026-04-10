@@ -30,6 +30,7 @@ import { Button } from "@/components/ui/button"
 import { toast } from "sonner"
 import SettingPanel from "../_components/SettingPanel"
 import CursorGlow from "../_components/CursorGlow"
+import CodePreviewModal from "@/components/CodePreviewModal"
 
 const renderOutputWithLinks = (output: string) => {
   const urlRegex = /(https?:\/\/[^\s]+)/g
@@ -757,6 +758,8 @@ function AgentBuilder() {
   const [executionLogs, setExecutionLogs] = useState<{ step: string; output: string; source?: "api" | "llm"; imageUrl?: string }[]>([])
   const [showOutputPanel, setShowOutputPanel] = useState(false)
   const [showWorkflowModal, setShowWorkflowModal] = useState(false)
+  const [showCodePreview, setShowCodePreview] = useState(false)
+  const [generatedCode, setGeneratedCode] = useState("")
   const [workflowConfig, setWorkflowConfig] = useState<{
     goal: string;
     apiKeys: Record<string, string>;
@@ -1258,7 +1261,15 @@ IMPORTANT: Use the customer data provided above. Do NOT generate fake names, ord
   return (
     <div>
       <CursorGlow />
-      <Header agentDetail={agentDetail} nodes={addedNodes} edges={nodeEdges} />
+      <Header 
+        agentDetail={agentDetail} 
+        nodes={addedNodes} 
+        edges={nodeEdges} 
+        onPreviewCode={(code) => {
+          setGeneratedCode(code);
+          setShowCodePreview(true);
+        }} 
+      />
 
       <div className="bg-slate-100" style={{ width: "100vw", height: "90vh" }}>
         <ReactFlow
@@ -1401,6 +1412,12 @@ IMPORTANT: Use the customer data provided above. Do NOT generate fake names, ord
         onSubmit={handleGenerateWorkflow}
         initialGoal={workflowConfig.goal}
         initialApiKeys={workflowConfig.apiKeys}
+      />
+
+      <CodePreviewModal
+        isOpen={showCodePreview}
+        onClose={() => setShowCodePreview(false)}
+        code={generatedCode}
       />
     </div>
   )
