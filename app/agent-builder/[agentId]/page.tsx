@@ -30,6 +30,7 @@ import { Button } from "@/components/ui/button"
 import { toast } from "sonner"
 import SettingPanel from "../_components/SettingPanel"
 import ExplainWorkflowModal from "./_components/ExplainWorkflowModal"
+import PublishModal from "@/components/PublishModal"
 import CursorGlow from "../_components/CursorGlow"
 import CodePreviewModal from "@/components/CodePreviewModal"
 
@@ -764,6 +765,8 @@ function AgentBuilder() {
   const [isExplainOpen, setIsExplainOpen] = useState(false)
   const [explanation, setExplanation] = useState<{ step: number; title: string; description: string }[]>([])
   const [loadingExplain, setLoadingExplain] = useState(false)
+  const [isPublishModalOpen, setIsPublishModalOpen] = useState(false)
+  const [shareLink, setShareLink] = useState("")
   const [workflowConfig, setWorkflowConfig] = useState<{
     goal: string;
     apiKeys: Record<string, string>;
@@ -791,6 +794,21 @@ function AgentBuilder() {
   useEffect(() => {
     if (agentId) GetAgentDetail()
   }, [agentId])
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    const encoded = params.get("data")
+
+    if (encoded) {
+      try {
+        const decoded = JSON.parse(decodeURIComponent(escape(atob(encoded))))
+        if (decoded.nodes) setAddedNodes(decoded.nodes)
+        if (decoded.edges) setNodeEdges(decoded.edges)
+      } catch (e) {
+        console.error("Invalid shared workflow data")
+      }
+    }
+  }, [])
 
   const GetAgentDetail = async () => {
     const result = await convex.query(api.agent.GetAgentById, {
@@ -940,6 +958,20 @@ function AgentBuilder() {
     toast.success("Agent deleted")
 
     router.push("/dashboard")
+  }
+
+  const handlePublish = () => {
+    if (!addedNodes || addedNodes.length === 0) {
+      toast.error("No workflow to publish")
+      return
+    }
+
+    const data = JSON.stringify({ nodes: addedNodes, edges: nodeEdges })
+    const encoded = encodeURIComponent(btoa(unescape(encodeURIComponent(data))))
+    const url = `${window.location.origin}/agent-builder?data=${encoded}`
+
+    setShareLink(url)
+    setIsPublishModalOpen(true)
   }
 
   const onNodeSelect = useCallback(
@@ -1314,7 +1346,8 @@ IMPORTANT: Use the customer data provided above. Do NOT generate fake names, ord
         onPreviewCode={(code) => {
           setGeneratedCode(code);
           setShowCodePreview(true);
-        }} 
+        }}
+        onPublish={handlePublish}
       />
 
       <div className="bg-slate-100" style={{ width: "100vw", height: "90vh" }}>
@@ -1475,6 +1508,12 @@ IMPORTANT: Use the customer data provided above. Do NOT generate fake names, ord
         onClose={() => setIsExplainOpen(false)}
         explanation={explanation}
         loading={loadingExplain}
+      />
+
+      <PublishModal
+        isOpen={isPublishModalOpen}
+        onClose={() => setIsPublishModalOpen(false)}
+        link={shareLink}
       />
     </div>
   )

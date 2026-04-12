@@ -31,9 +31,10 @@ type Props = {
     nodes?: FlowNode[];
     edges?: FlowEdge[];
     onPreviewCode?: (code: string) => void;
+    onPublish?: () => void;
 }
 
-function Header({agentDetail, previewHeader=false, nodes = [], edges = [], onPreviewCode}:Props) {
+function Header({agentDetail, previewHeader=false, nodes = [], edges = [], onPreviewCode, onPublish}:Props) {
   
   const handleCodeClick = () => {
     const code = generatePythonCode(nodes, edges);
@@ -44,6 +45,12 @@ function Header({agentDetail, previewHeader=false, nodes = [], edges = [], onPre
     const code = generatePythonCode(nodes, edges);
     if (onPreviewCode) {
       onPreviewCode(code);
+    }
+  };
+
+  const handlePublishClick = () => {
+    if (onPublish) {
+      onPublish();
     }
   };
 
@@ -65,7 +72,7 @@ function Header({agentDetail, previewHeader=false, nodes = [], edges = [], onPre
         <Link href={`/agent-builder/${agentDetail?.agentId}`}>
         <Button variant={'outline'}><X />Close Preview</Button>
         </Link>)}
-        <Button>Publish</Button>
+        <Button onClick={handlePublishClick}>Publish</Button>
     </div>
    </div>
   )
