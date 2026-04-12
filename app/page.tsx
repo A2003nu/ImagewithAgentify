@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
 import WorkflowPreview from "@/components/WorkflowPreview"
 import FeaturesSection from "@/components/FeaturesSection"
+import HowItWorks from "@/components/HowItWorks"
 import CTASection from "@/components/CTASection"
 import CursorGlow from "@/components/CursorGlow"
 import Loader from "@/components/Loader"
@@ -21,11 +22,8 @@ export default function LandingPage() {
     setTimeout(() => setLoading(false), 1200)
   }, [])
 
-  useEffect(() => {
-    if (isLoaded && isSignedIn) {
-      router.push("/dashboard")
-    }
-  }, [isSignedIn, isLoaded, router])
+  // REMOVED: Auto-redirect to dashboard
+  // Now landing page is always visible, button changes based on auth state
 
   useEffect(() => {
     const handleScroll = () => {
@@ -143,6 +141,9 @@ export default function LandingPage() {
 
       {/* Features Section */}
       <FeaturesSection />
+
+      {/* How It Works Section */}
+      <HowItWorks />
 
       {/* CTA Section */}
       <CTASection />
