@@ -98,3 +98,16 @@ export const DeleteAgent = mutation({
     await ctx.db.delete(args.id);
   },
 });
+
+export const UpdateAgentPublished = mutation({
+  args: {
+    id: v.id("AgentTable"),
+    published: v.boolean(),
+  },
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.id, {
+      published: args.published,
+    });
+    return await ctx.db.get(args.id);
+  },
+});

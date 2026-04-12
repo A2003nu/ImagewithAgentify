@@ -782,6 +782,7 @@ function AgentBuilder() {
 
   const convex = useConvex()
   const UpdateAgentDetail = useMutation(api.agent.UpdateAgentDetail)
+  const updateAgentPublished = useMutation(api.agent.UpdateAgentPublished)
   const deleteAgent = useMutation(api.agent.DeleteAgent)
 
   const router = useRouter()
@@ -960,18 +961,34 @@ function AgentBuilder() {
     router.push("/dashboard")
   }
 
-  const handlePublish = () => {
+  const handlePublish = async () => {
     if (!addedNodes || addedNodes.length === 0) {
       toast.error("No workflow to publish")
       return
     }
 
-    const data = JSON.stringify({ nodes: addedNodes, edges: nodeEdges })
-    const encoded = encodeURIComponent(btoa(unescape(encodeURIComponent(data))))
-    const url = `${window.location.origin}/agent-builder?data=${encoded}`
+    if (!agentDetail?._id) {
+      toast.error("Agent not found")
+      return
+    }
 
-    setShareLink(url)
-    setIsPublishModalOpen(true)
+    try {
+      await updateAgentPublished({
+        id: agentDetail._id,
+        published: true,
+      })
+
+      const data = JSON.stringify({ nodes: addedNodes, edges: nodeEdges })
+      const encoded = encodeURIComponent(btoa(unescape(encodeURIComponent(data))))
+      const url = `${window.location.origin}/agent-builder?data=${encoded}`
+
+      setShareLink(url)
+      setIsPublishModalOpen(true)
+      toast.success("Workflow published!")
+    } catch (error) {
+      console.error("Publish failed:", error)
+      toast.error("Failed to publish workflow")
+    }
   }
 
   const onNodeSelect = useCallback(
