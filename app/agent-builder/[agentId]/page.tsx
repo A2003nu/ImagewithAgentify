@@ -29,6 +29,7 @@ import { Agent } from "@/types/AgentType"
 import { Button } from "@/components/ui/button"
 import { toast } from "sonner"
 import SettingPanel from "../_components/SettingPanel"
+import ExplainWorkflowModal from "./_components/ExplainWorkflowModal"
 import CursorGlow from "../_components/CursorGlow"
 import CodePreviewModal from "@/components/CodePreviewModal"
 
@@ -760,6 +761,9 @@ function AgentBuilder() {
   const [showWorkflowModal, setShowWorkflowModal] = useState(false)
   const [showCodePreview, setShowCodePreview] = useState(false)
   const [generatedCode, setGeneratedCode] = useState("")
+  const [isExplainOpen, setIsExplainOpen] = useState(false)
+  const [explanation, setExplanation] = useState<{ step: number; title: string; description: string }[]>([])
+  const [loadingExplain, setLoadingExplain] = useState(false)
   const [workflowConfig, setWorkflowConfig] = useState<{
     goal: string;
     apiKeys: Record<string, string>;
@@ -881,6 +885,48 @@ function AgentBuilder() {
     })
 
     toast.success("Workflow saved!")
+  }
+
+  const generateExplanation = async (
+    nodes: any[],
+    edges: any[]
+  ): Promise<{ step: number; title: string; description: string }[]> => {
+    if (nodes.length === 0) {
+      return []
+    }
+
+    const response = await fetch("/api/explain-workflow", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ nodes, edges }),
+    })
+
+    if (!response.ok) {
+      throw new Error("Failed to generate explanation")
+    }
+
+    const data = await response.json()
+    return data.explanation
+  }
+
+  const handleExplainWorkflow = async () => {
+    if (addedNodes.length === 0) {
+      toast.error("No workflow to explain")
+      return
+    }
+
+    setLoadingExplain(true)
+    setIsExplainOpen(true)
+
+    try {
+      const result = await generateExplanation(addedNodes, nodeEdges)
+      setExplanation(result)
+    } catch (error) {
+      console.error(error)
+      toast.error("Failed to generate explanation")
+    } finally {
+      setLoadingExplain(false)
+    }
   }
 
   const handleDeleteAgent = async () => {
@@ -1297,6 +1343,10 @@ IMPORTANT: Use the customer data provided above. Do NOT generate fake names, ord
                 ⚡ Generate Workflow
               </Button>
 
+              <Button onClick={handleExplainWorkflow} variant="outline">
+                🧠 Explain Workflow
+              </Button>
+
               <Button onClick={handleRunWorkflow}>
                 ▶ Run Workflow
               </Button>
@@ -1418,6 +1468,13 @@ IMPORTANT: Use the customer data provided above. Do NOT generate fake names, ord
         isOpen={showCodePreview}
         onClose={() => setShowCodePreview(false)}
         code={generatedCode}
+      />
+
+      <ExplainWorkflowModal
+        isOpen={isExplainOpen}
+        onClose={() => setIsExplainOpen(false)}
+        explanation={explanation}
+        loading={loadingExplain}
       />
     </div>
   )
