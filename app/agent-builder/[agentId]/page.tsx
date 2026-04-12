@@ -4,6 +4,7 @@ import { convertWorkflowToFlow } from "@/lib/workflow"
 import React, { useCallback, useContext, useEffect, useState } from "react"
 import Header from "../_components/Header"
 import { WorkflowContext } from "@/context/WorkflowContext"
+import { UserDetailContext } from "@/context/UserDetailContext"
 import {
   ReactFlow,
   applyNodeChanges,
@@ -22,7 +23,7 @@ import { useRouter } from "next/navigation"
 import { nodeTypes } from "./nodeTypes"
 import AgentToolsPanel from "../_components/AgentToolsPanel"
 import { WorkflowInputModal } from "./_components/WorkflowInputModal"
-import { useConvex, useMutation } from "convex/react"
+import { useConvex, useMutation, useQuery } from "convex/react"
 import { useParams } from "next/navigation"
 import { api } from "@/convex/_generated/api"
 import { Agent } from "@/types/AgentType"
@@ -755,6 +756,7 @@ function AgentBuilder() {
     setSelectedNode,
   } = useContext(WorkflowContext) as any
 
+  const { userDetail } = useContext(UserDetailContext) as any
   const { agentId } = useParams() as { agentId?: string }
   const [agentDetail, setAgentDetail] = useState<Agent>()
   const [executionLogs, setExecutionLogs] = useState<{ step: string; output: string; source?: "api" | "llm"; imageUrl?: string }[]>([])
@@ -783,6 +785,7 @@ function AgentBuilder() {
   const convex = useConvex()
   const UpdateAgentDetail = useMutation(api.agent.UpdateAgentDetail)
   const updateAgentPublished = useMutation(api.agent.UpdateAgentPublished)
+  const createTemplate = useMutation(api.template.createTemplate)
   const deleteAgent = useMutation(api.agent.DeleteAgent)
 
   const router = useRouter()
@@ -796,11 +799,24 @@ function AgentBuilder() {
     if (agentId) GetAgentDetail()
   }, [agentId])
 
+  const userTemplates = useQuery(api.template.getTemplates)
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search)
     const encoded = params.get("data")
+    const templateId = params.get("templateId")
 
-    if (encoded) {
+    if (templateId && userDetail?._id && userTemplates) {
+      const template = userTemplates.find((t: any) => t._id === templateId)
+      if (template) {
+        setAddedNodes(Array.isArray(template.nodes) ? template.nodes : [])
+        setNodeEdges(Array.isArray(template.edges) ? template.edges : [])
+        toast.success("Template loaded!")
+        window.history.replaceState({}, document.title, "/agent-builder")
+      } else {
+        console.warn("Template not found for ID:", templateId)
+      }
+    } else if (encoded && userDetail?._id) {
       try {
         const decoded = JSON.parse(decodeURIComponent(escape(atob(encoded))))
         if (decoded.nodes) setAddedNodes(decoded.nodes)
@@ -809,7 +825,7 @@ function AgentBuilder() {
         console.error("Invalid shared workflow data")
       }
     }
-  }, [])
+  }, [userDetail, userTemplates])
 
   const GetAgentDetail = async () => {
     const result = await convex.query(api.agent.GetAgentById, {
@@ -976,6 +992,16 @@ function AgentBuilder() {
       await updateAgentPublished({
         id: agentDetail._id,
         published: true,
+      })
+
+      await createTemplate({
+        name: agentDetail.name || "Untitled Template",
+        description: "Generated from Agentify workflow",
+        nodes: addedNodes,
+        edges: nodeEdges,
+        createdAt: Date.now(),
+        userId: userDetail?._id,
+        sourceAgentId: agentDetail._id,
       })
 
       const data = JSON.stringify({ nodes: addedNodes, edges: nodeEdges })

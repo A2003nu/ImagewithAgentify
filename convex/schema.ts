@@ -25,4 +25,14 @@ export default defineSchema({
     complaintData: v.optional(v.any())
 
   }),
+
+  TemplateTable: defineTable({
+    name: v.string(),
+    description: v.optional(v.string()),
+    nodes: v.array(v.any()),
+    edges: v.array(v.any()),
+    createdAt: v.number(),
+    userId: v.id("UserTable"),
+    sourceAgentId: v.optional(v.string()),
+  }),
 });

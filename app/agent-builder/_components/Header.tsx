@@ -26,7 +26,8 @@ interface FlowEdge {
 }
 
 type Props = {
-    agentDetail: Agent | undefined,
+    agentDetail?: Agent,
+    agentName?: string,
     previewHeader?: boolean,
     nodes?: FlowNode[];
     edges?: FlowEdge[];
@@ -34,11 +35,13 @@ type Props = {
     onPublish?: () => void;
 }
 
-function Header({agentDetail, previewHeader=false, nodes = [], edges = [], onPreviewCode, onPublish}:Props) {
+function Header({agentDetail, agentName, previewHeader=false, nodes = [], edges = [], onPreviewCode, onPublish}:Props) {
+  
+  const agentNameDisplay = agentName || agentDetail?.name || "Agentify";
   
   const handleCodeClick = () => {
     const code = generatePythonCode(nodes, edges);
-    downloadPythonFile(code, `${agentDetail?.name || "agentify"}_workflow.py`);
+    downloadPythonFile(code, `${agentNameDisplay}_workflow.py`);
   }
 
   const handlePreviewClick = () => {
@@ -58,7 +61,7 @@ function Header({agentDetail, previewHeader=false, nodes = [], edges = [], onPre
    <div className="w-full p-3 flex items-center justify-between">
     <div className="flex gap-2 items-center">
         <ChevronLeft className='h-8 w-8' />
-        <h2 className="text-xl">{agentDetail?.name}</h2>
+        <h2 className="text-xl">{agentNameDisplay}</h2>
     </div>
 
     <div className="flex items-center gap-3">
