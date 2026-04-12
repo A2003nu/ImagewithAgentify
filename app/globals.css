@@ -160,3 +160,8 @@
 .react-flow__pane:active {
   cursor: grabbing;
 }
+
+/* Smooth Scroll */
+html {
+  scroll-behavior: smooth;
+}
