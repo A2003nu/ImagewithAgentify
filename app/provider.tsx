@@ -31,12 +31,13 @@ useEffect(()=>{
     user&&createAndGetUser();
 },[user])
 
-const createAndGetUser = async () => {
+  const createAndGetUser = async () => {
     if (!user) return;
 
     const result = await createUser({
       name: user.fullName ?? "",
       email: user.primaryEmailAddress?.emailAddress ?? "",
+      clerkUserId: user.id,
     });
 
     setUserDetail(result);

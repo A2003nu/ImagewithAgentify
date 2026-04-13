@@ -32,6 +32,7 @@ import { toast } from "sonner"
 import SettingPanel from "../_components/SettingPanel"
 import ExplainWorkflowModal from "./_components/ExplainWorkflowModal"
 import PublishModal from "@/components/PublishModal"
+import UpgradeModal from "@/components/UpgradeModal"
 import CursorGlow from "../_components/CursorGlow"
 import CodePreviewModal from "@/components/CodePreviewModal"
 
@@ -769,6 +770,7 @@ function AgentBuilder() {
   const [loadingExplain, setLoadingExplain] = useState(false)
   const [isPublishModalOpen, setIsPublishModalOpen] = useState(false)
   const [shareLink, setShareLink] = useState("")
+  const [showUpgrade, setShowUpgrade] = useState(false)
   const [workflowConfig, setWorkflowConfig] = useState<{
     goal: string;
     apiKeys: Record<string, string>;
@@ -787,6 +789,19 @@ function AgentBuilder() {
   const updateAgentPublished = useMutation(api.agent.UpdateAgentPublished)
   const createTemplate = useMutation(api.template.createTemplate)
   const deleteAgent = useMutation(api.agent.DeleteAgent)
+  const deductCredits = useMutation(api.users.deductCredits)
+
+  const userCredits = useQuery(api.users.getUserByClerkId, { 
+    clerkId: userDetail?.clerkUserId 
+  })
+  const credits = userCredits?.credits ?? 0
+
+  // Low credit warning (non-blocking)
+  useEffect(() => {
+    if (credits < 10 && credits > 0) {
+      toast.warning("Low credits ⚠️ Upgrade soon")
+    }
+  }, [credits])
 
   const router = useRouter()
 
@@ -919,7 +934,18 @@ function AgentBuilder() {
       edges: nodeEdges,
     })
 
-    toast.success("Workflow saved!")
+    // Deduct credits on save
+    if (credits >= 100) {
+      try {
+        await deductCredits({ clerkId: userDetail?.clerkUserId, amount: 100 })
+        toast.success("Workflow saved! -100 credits ⚡")
+      } catch (error) {
+        toast.success("Workflow saved!")
+      }
+    } else {
+      toast.warning("Low credits - save without deduction")
+      toast.success("Workflow saved!")
+    }
   }
 
   const generateExplanation = async (
@@ -1557,6 +1583,11 @@ IMPORTANT: Use the customer data provided above. Do NOT generate fake names, ord
         isOpen={isPublishModalOpen}
         onClose={() => setIsPublishModalOpen(false)}
         link={shareLink}
+      />
+
+      <UpgradeModal
+        isOpen={showUpgrade}
+        onClose={() => setShowUpgrade(false)}
       />
     </div>
   )

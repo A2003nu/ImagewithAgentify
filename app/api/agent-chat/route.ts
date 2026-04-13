@@ -172,14 +172,22 @@ FORMAT:
     console.log("🧠 LLM Response:", responseText.substring(0, 300) + "...");
 
     // ============================
-    // 🚫 BLOCK TOOL HALLUCINATION
+    // 🔍 CHECK FOR HALLUCINATION (FLEXIBLE)
     // ============================
+    // Get valid tool names for comparison
+    const validToolNames = agentTools.map((t: any) => t.name.toLowerCase());
+    console.log("📋 Valid Tool Names:", validToolNames);
+
+    // Only log warning, don't block - let matching logic handle it
     if (responseText.includes('"tool"')) {
-      console.log("🚫 Blocked tool hallucination");
-      responseText = JSON.stringify({
-        error: "Tool usage not allowed",
-        message: "Retrying with strict JSON output"
-      });
+      // Extract the tool name from response to validate
+      const toolMatch = responseText.match(/"tool"\s*:\s*"([^"]+)"/i);
+      if (toolMatch) {
+        const requestedTool = toolMatch[1].toLowerCase();
+        if (!validToolNames.includes(requestedTool)) {
+          console.log("⚠️ Tool not exact match, trying fuzzy match...");
+        }
+      }
     }
 
     // ============================
@@ -239,6 +247,23 @@ FORMAT:
     console.log("🔧 Tool Decision Parsed:", parsed);
 
     // ============================
+    // ✅ SAFE TOOL ACCESS (CRITICAL FIX)
+    // ============================
+    if (!parsed.tool) {
+      console.log("❌ No tool returned by LLM");
+      return NextResponse.json({
+        success: false,
+        error: "No tool selected",
+        message: "LLM did not return a valid tool"
+      });
+    }
+
+    // Normalize tool name
+    const requestedTool = parsed.tool?.toLowerCase()?.trim();
+    console.log("🔧 Requested Tool:", requestedTool);
+    console.log("📦 Available Tools:", agentTools.map((t: any) => t.name));
+
+    // ============================
     // 🔍 DETECTING TOOL CALL
     // ============================
     console.log("\n==============================");
@@ -263,16 +288,21 @@ FORMAT:
     }
 
     // ============================
-    // 🔹 FIND TOOL
+    // 🔹 FIND TOOL (IMPROVED MATCHING)
     // ============================
-    // Find tool - match by name or ID (flexible matching)
-    let tool = agentTools.find(
-      (t: any) =>
-        t.name.toLowerCase() === parsed.tool.toLowerCase() ||
-        t.id.toLowerCase() === parsed.tool.toLowerCase() ||
-        t.name.toLowerCase().includes(parsed.tool.toLowerCase()) ||
-        parsed.tool.toLowerCase().includes(t.name.toLowerCase())
-    );
+    const tool = agentTools.find((t: any) => {
+      const name = t.name?.toLowerCase();
+      const id = t.id?.toLowerCase();
+
+      return (
+        name === requestedTool ||
+        id === requestedTool ||
+        name?.includes(requestedTool) ||
+        requestedTool?.includes(name)
+      );
+    });
+
+    console.log("✅ Selected Tool:", tool?.name);
 
     // ============================================================
     // 🖼️ IMAGE GENERATION - ROBUST PROMPT EXTRACTION
@@ -342,14 +372,16 @@ FORMAT:
     }
 
     if (!tool) {
-      console.error(`❌ TOOL NOT FOUND: ${parsed.tool}`);
+      console.log("❌ Tool not found:", parsed.tool);
       console.log("⚠️ Available tools:", agentTools.map((t: any) => t.name));
-      console.log("⚠️ No tool specified - returning parsed data");
+
+      // Fallback if tool still invalid
+      console.log("🔁 Retrying without tool...");
 
       return NextResponse.json({
         success: true,
-        type: "debug",
-        data: parsed
+        output: "Sorry, I couldn't find the correct tool. Please try again.",
+        availableTools: agentTools.map((t: any) => t.name),
       });
     }
 

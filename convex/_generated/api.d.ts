@@ -11,6 +11,7 @@
 import type * as agent from "../agent.js";
 import type * as template from "../template.js";
 import type * as user from "../user.js";
+import type * as users from "../users.js";
 
 import type {
   ApiFromModules,
@@ -22,6 +23,7 @@ declare const fullApi: ApiFromModules<{
   agent: typeof agent;
   template: typeof template;
   user: typeof user;
+  users: typeof users;
 }>;
 
 /**

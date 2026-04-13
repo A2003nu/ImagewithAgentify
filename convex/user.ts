@@ -5,6 +5,7 @@ export const CreateNewUser = mutation({
   args: {
     name: v.string(),
     email: v.string(),
+    clerkUserId: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
 
@@ -18,9 +19,18 @@ export const CreateNewUser = mutation({
         name: args.name,
         email: args.email,
         token: 5000,
+        credits: 5000,
+        createdAt: Date.now(),
+        clerkUserId: args.clerkUserId,
       });
 
       return await ctx.db.get(id);
+    }
+
+    if (user.credits === undefined) {
+      await ctx.db.patch(user._id, {
+        credits: 5000,
+      });
     }
 
     return user;

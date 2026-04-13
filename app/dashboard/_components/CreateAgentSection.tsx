@@ -20,28 +20,27 @@ import {v4 as uuidv4} from 'uuid'
 import { useRouter } from 'next/navigation'
 import { UserDetailContext } from '@/context/UserDetailContext'
 
-
 function CreateAgentSection() {
 
-  const createAgentMutation =useMutation(api.agent.CreateAgent);
-  const [agentName, setAgentName] = useState<string>("");
-  const [openDialog, setOpenDialog] = useState(false);
- const router=useRouter();
- const [loader,setLoader]=useState(false);
- const {userDetail,setUserDetail}=useContext(UserDetailContext);
+  const createAgentMutation = useMutation(api.agent.CreateAgent)
+  const [agentName, setAgentName] = useState<string>("")
+  const [openDialog, setOpenDialog] = useState(false)
+  const router = useRouter()
+  const [loader, setLoader] = useState(false)
+  const { userDetail } = useContext(UserDetailContext)
 
   const CreateAgent = async () => {
-    setLoader(true);
-    const agentId=uuidv4();
-    const result=await createAgentMutation({
-      agentId:agentId,
-      name:agentName ?? '',
-userId:userDetail?._id
+    setLoader(true)
+    const agentId = uuidv4()
+    const result = await createAgentMutation({
+      agentId: agentId,
+      name: agentName ?? '',
+      userId: userDetail?._id
     })
-    setOpenDialog(false);
-    setLoader(false);
+    setOpenDialog(false)
+    setLoader(false)
     router.push('/agent-builder/'+agentId)
-  };
+  }
 
   return (
     <div className="space-y-2 flex flex-col justify-center items-center mt-24">

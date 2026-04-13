@@ -7,6 +7,9 @@ export default defineSchema({
     email: v.string(),
     subscription: v.optional(v.string()),
     token: v.number(),
+    credits: v.optional(v.number()),
+    createdAt: v.optional(v.number()),
+    clerkUserId: v.optional(v.string()),
   }),
 
   AgentTable: defineTable({
