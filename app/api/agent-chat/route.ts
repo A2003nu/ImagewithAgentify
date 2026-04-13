@@ -91,6 +91,49 @@ export async function POST(req: NextRequest) {
     console.log("✅ FINAL INPUT:", finalInput);
 
     // ============================
+    // 🚨 DIRECT MODE: NO TOOLS AVAILABLE
+    // ============================
+    if (!agentTools || agentTools.length === 0) {
+      console.log("⚠️ No tools available → switching to direct LLM mode");
+
+      const groqDirectResult = await safeGroqCall([
+        {
+          role: "system",
+          content: `
+You are a helpful AI assistant. Generate the best possible output for the user's request.
+
+IMPORTANT:
+- Return ONLY the generated content directly (no JSON, no tool format)
+- Be concise and helpful
+- If user data is provided above, you MUST use it. Do NOT generate fake data.
+
+${userDataInjection}
+`,
+        },
+        {
+          role: "user",
+          content: finalInput,
+        },
+      ]);
+
+      let directResponse = "";
+      if (!groqDirectResult.success && groqDirectResult.fallback) {
+        directResponse = "Sorry, I'm temporarily unavailable. Please try again.";
+      } else if (groqDirectResult.data) {
+        directResponse = groqDirectResult.data.choices[0]?.message?.content ?? "";
+      }
+
+      console.log("📤 Direct Output:", directResponse.substring(0, 200) + "...");
+
+      return NextResponse.json({
+        success: true,
+        reply: directResponse,
+        mode: "direct",
+        source: "llm",
+      });
+    }
+
+    // ============================
     // 🧠 STEP 1: LLM DECISION (with rate limit protection)
     // ============================
     console.log("\n==============================");
