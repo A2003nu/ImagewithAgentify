@@ -91,6 +91,36 @@ export async function POST(req: NextRequest) {
     console.log("✅ FINAL INPUT:", finalInput);
 
     // ============================
+    // 🖼️ INTENT DETECTION: IMAGE
+    // ============================
+    const isImageIntent = /image|generate image|create image|picture|photo|draw|render\b/i.test(finalInput);
+    
+    if (isImageIntent) {
+      console.log("🖼️ Image intent detected → using Pollinations API");
+      
+      // Clean prompt: remove image-related keywords
+      const imagePrompt = finalInput
+        .replace(/generate (an? )?image (of |with )?/gi, "")
+        .replace(/create (an? )?image (of |with )?/gi, "")
+        .replace(/draw (an? )?/gi, "")
+        .replace(/image of|picture of|photo of/gi, "")
+        .trim();
+      
+      const cleanPrompt = imagePrompt.length >= 2 ? imagePrompt : "abstract art";
+      const imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(cleanPrompt)}`;
+      
+      console.log("🖼️ Image URL:", imageUrl);
+      
+      return NextResponse.json({
+        success: true,
+        type: "image",
+        imageUrl: imageUrl,
+        prompt: cleanPrompt,
+        source: "pollinations",
+      });
+    }
+
+    // ============================
     // 🚨 DIRECT MODE: NO TOOLS AVAILABLE
     // ============================
     if (!agentTools || agentTools.length === 0) {
