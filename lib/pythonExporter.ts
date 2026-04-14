@@ -33,6 +33,7 @@ export function buildDependencyGraph(edges: FlowEdge[]): Record<string, string[]
   const dependencies: Record<string, string[]> = {};
   
   for (const edge of edges) {
+    if (!edge.source || !edge.target) continue;
     const target = edge.target;
     const source = edge.source;
     
@@ -94,9 +95,8 @@ export function topologicalSort(nodes: FlowNode[], dependencies: Record<string, 
     }
   }
   
-  // Check for circular dependencies
+  // Check for circular dependencies - fallback to original order
   if (sorted.length !== nodes.length) {
-    console.error("Circular dependency detected in workflow");
     return nodes.map(n => n.id); // Fallback to original order
   }
   
