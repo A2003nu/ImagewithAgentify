@@ -17,6 +17,7 @@ import {
   Panel,
   OnSelectionChangeParams,
   useOnSelectionChange,
+  useReactFlow,
 } from "@xyflow/react"
 import "@xyflow/react/dist/style.css"
 import { useRouter } from "next/navigation"
@@ -34,6 +35,7 @@ import ExplainWorkflowModal from "./_components/ExplainWorkflowModal"
 import PublishModal from "@/components/PublishModal"
 import UpgradeModal from "@/components/UpgradeModal"
 import { useVoiceOutput } from "@/hooks/useVoiceOutput"
+import { useCinematicCamera } from "@/hooks/useCinematicCamera"
 import CursorGlow from "../_components/CursorGlow"
 import CodePreviewModal from "@/components/CodePreviewModal"
 
@@ -773,6 +775,8 @@ function AgentBuilder() {
   const [shareLink, setShareLink] = useState("")
   const [showUpgrade, setShowUpgrade] = useState(false)
   const [voiceMode, setVoiceMode] = useState(false)
+  const [cinematicMode, setCinematicMode] = useState(true)
+  const [activeNodeId, setActiveNodeId] = useState<string | null>(null)
   const [workflowConfig, setWorkflowConfig] = useState<{
     goal: string;
     apiKeys: Record<string, string>;
@@ -787,6 +791,12 @@ function AgentBuilder() {
   }>({ goal: "", apiKeys: {} })
 
   const { speak: speakVoice, isSpeaking: isVoiceSpeaking } = useVoiceOutput()
+
+  const { openingShot, finalShot } = useCinematicCamera({
+    cinematicMode,
+    activeNodeId,
+    nodes: addedNodes,
+  })
 
   const convex = useConvex()
   const UpdateAgentDetail = useMutation(api.agent.UpdateAgentDetail)
@@ -1184,6 +1194,8 @@ function AgentBuilder() {
 
     resetNodeStatuses()
     setExecutionLogs([])
+    setActiveNodeId(null)
+    openingShot()
     
     await new Promise((res) => setTimeout(res, 300))
 
@@ -1194,6 +1206,7 @@ function AgentBuilder() {
         console.log(`Executing: ${nodeName}`)
         
         setNodeStatus(node.id, "running")
+        setActiveNodeId(node.id)
         await new Promise((res) => setTimeout(res, 600))
 
         const nodeType = node.type
@@ -1406,6 +1419,8 @@ IMPORTANT: Use the customer data provided above. Do NOT generate fake names, ord
         ...logs,
         { step: "Final Output", output: context.lastOutput || "Completed", imageUrl: context.imageUrl },
       ])
+      setActiveNodeId(null)
+      finalShot()
       if (context.lastOutput) {
         speakVoice(context.lastOutput)
       }
@@ -1473,6 +1488,14 @@ IMPORTANT: Use the customer data provided above. Do NOT generate fake names, ord
                 className={isVoiceSpeaking ? "animate-pulse" : ""}
               >
                 🎤 Voice Mode
+              </Button>
+
+              <Button
+                onClick={() => setCinematicMode(prev => !prev)}
+                variant={cinematicMode ? "default" : "outline"}
+                className={cinematicMode ? "bg-primary" : ""}
+              >
+                🎬 {cinematicMode ? "Cinematic On" : "Cinematic Off"}
               </Button>
 
               <Button
