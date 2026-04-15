@@ -13,6 +13,11 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Sparkles, Cloud, Newspaper, Key, Zap, FileText, Upload, Briefcase, AlertCircle, Package, Clock, User } from "lucide-react"
+import { useVoiceInput } from "@/hooks/useVoiceInput"
+import { useVoiceOutput } from "@/hooks/useVoiceOutput"
+import { VoiceButton } from "@/components/VoiceButton"
+import { VoiceIndicator } from "@/components/VoiceIndicator"
+import { toast } from "sonner"
 
 interface WorkflowInputModalProps {
   open: boolean
@@ -29,9 +34,11 @@ interface WorkflowInputModalProps {
       issueType: string;
       delayDays: number;
     };
-  }) => void
+  }, voiceModeEnabled?: boolean) => void
   initialGoal?: string
   initialApiKeys?: Record<string, string>
+  voiceMode?: boolean
+  onVoiceOutput?: (text: string) => void
 }
 
 const detectTools = (goal: string) => {
@@ -60,6 +67,8 @@ export function WorkflowInputModal({
   onSubmit,
   initialGoal = "",
   initialApiKeys = {},
+  voiceMode = false,
+  onVoiceOutput,
 }: WorkflowInputModalProps) {
   const [goal, setGoal] = useState(initialGoal)
   const [apiKeys, setApiKeys] = useState<Record<string, string>>(initialApiKeys)
@@ -78,6 +87,11 @@ export function WorkflowInputModal({
   const [issueType, setIssueType] = useState("Late Delivery")
   const [delayDays, setDelayDays] = useState("")
   const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const { isSupported: voiceInputSupported, isListening, transcript, startListening, stopListening, resetTranscript, error: voiceError } = useVoiceInput()
+  const { isSupported: voiceOutputSupported, isSpeaking, speak } = useVoiceOutput()
+  const [voiceStatus, setVoiceStatus] = useState<"idle" | "listening" | "processing" | "speaking">("idle")
+  const [showTranscript, setShowTranscript] = useState(false)
 
   useEffect(() => {
     if (open) {
@@ -99,6 +113,36 @@ export function WorkflowInputModal({
     setIsResumeMode(detectResumePrompt(goal))
     setIsComplaintMode(detectComplaintWorkflow(goal))
   }, [goal])
+
+  useEffect(() => {
+    if (voiceError) {
+      toast.error(voiceError)
+    }
+  }, [voiceError])
+
+  useEffect(() => {
+    if (isListening) {
+      setVoiceStatus("listening")
+    } else if (!isListening && voiceStatus === "listening" && transcript) {
+      setVoiceStatus("processing")
+      setShowTranscript(true)
+      setTimeout(() => {
+        setShowTranscript(false)
+        if (transcript) {
+          setGoal(transcript)
+          resetTranscript()
+          if (voiceMode && onSubmit) {
+            onSubmit({
+              goal: transcript,
+              apiKeys: {},
+            }, true)
+            onOpenChange(false)
+          }
+        }
+        setVoiceStatus("idle")
+      }, 2000)
+    }
+  }, [isListening, transcript, voiceMode, onSubmit, onOpenChange])
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -281,13 +325,30 @@ export function WorkflowInputModal({
             <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
               What would you like to automate?
             </label>
-            <textarea
-              value={goal}
-              onChange={(e) => setGoal(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder={isResumeMode ? "e.g., Screen candidate resume for interview" : "e.g., Get weather and latest news for Bangalore"}
-              className="w-full min-h-[100px] p-3 rounded-md border border-input bg-background text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 resize-none"
-              autoFocus
+            <div className="relative">
+              <textarea
+                value={goal}
+                onChange={(e) => setGoal(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder={isResumeMode ? "e.g., Screen candidate resume for interview" : "e.g., Get weather and latest news for Bangalore"}
+                className="w-full min-h-[100px] p-3 pr-12 rounded-md border border-input bg-background text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 resize-none"
+                autoFocus
+              />
+              {voiceInputSupported && (
+                <div className="absolute right-3 bottom-3">
+                  <VoiceButton
+                    isListening={isListening}
+                    isProcessing={voiceStatus === "processing"}
+                    onClick={() => isListening ? stopListening() : startListening()}
+                    disabled={voiceStatus === "processing"}
+                  />
+                </div>
+              )}
+            </div>
+            <VoiceIndicator 
+              status={isSpeaking ? "speaking" : voiceStatus} 
+              transcript={transcript}
+              visible={showTranscript || isListening || voiceStatus === "processing" || isSpeaking}
             />
           </div>
 

@@ -33,6 +33,7 @@ import SettingPanel from "../_components/SettingPanel"
 import ExplainWorkflowModal from "./_components/ExplainWorkflowModal"
 import PublishModal from "@/components/PublishModal"
 import UpgradeModal from "@/components/UpgradeModal"
+import { useVoiceOutput } from "@/hooks/useVoiceOutput"
 import CursorGlow from "../_components/CursorGlow"
 import CodePreviewModal from "@/components/CodePreviewModal"
 
@@ -771,6 +772,7 @@ function AgentBuilder() {
   const [isPublishModalOpen, setIsPublishModalOpen] = useState(false)
   const [shareLink, setShareLink] = useState("")
   const [showUpgrade, setShowUpgrade] = useState(false)
+  const [voiceMode, setVoiceMode] = useState(false)
   const [workflowConfig, setWorkflowConfig] = useState<{
     goal: string;
     apiKeys: Record<string, string>;
@@ -783,6 +785,8 @@ function AgentBuilder() {
       delayDays: number;
     };
   }>({ goal: "", apiKeys: {} })
+
+  const { speak: speakVoice, isSpeaking: isVoiceSpeaking } = useVoiceOutput()
 
   const convex = useConvex()
   const UpdateAgentDetail = useMutation(api.agent.UpdateAgentDetail)
@@ -1052,7 +1056,7 @@ function AgentBuilder() {
 
   useOnSelectionChange({ onChange: onNodeSelect })
 
-  const handleGenerateWorkflow = async (config: { goal: string; apiKeys: Record<string, string>; jobRole?: string; resumeText?: string; complaintData?: { customerName: string; orderId: string; issueType: string; delayDays: number } }) => {
+  const handleGenerateWorkflow = async (config: { goal: string; apiKeys: Record<string, string>; jobRole?: string; resumeText?: string; complaintData?: { customerName: string; orderId: string; issueType: string; delayDays: number } }, voiceModeEnabled?: boolean) => {
     setWorkflowConfig(config)
 
     const hasExistingNodes = addedNodes.length > 1 || (addedNodes.length === 1 && addedNodes[0].type !== "StartNode");
@@ -1115,6 +1119,10 @@ function AgentBuilder() {
         setAddedNodes(newNodes)
         setNodeEdges(newEdges)
         toast.success("Workflow generated successfully!", { id: loadingToastId })
+        
+        if (voiceModeEnabled) {
+          setTimeout(() => handleRunWorkflow(), 500)
+        }
       }, 0)
 
     } catch (err) {
@@ -1398,6 +1406,9 @@ IMPORTANT: Use the customer data provided above. Do NOT generate fake names, ord
         ...logs,
         { step: "Final Output", output: context.lastOutput || "Completed", imageUrl: context.imageUrl },
       ])
+      if (context.lastOutput) {
+        speakVoice(context.lastOutput)
+      }
       toast.success("Workflow executed successfully", { id: loadingToastId })
     } catch (err) {
       console.error("❌ EXECUTION ERROR:", err)
@@ -1451,6 +1462,17 @@ IMPORTANT: Use the customer data provided above. Do NOT generate fake names, ord
 
               <Button onClick={handleRunWorkflow}>
                 ▶ Run Workflow
+              </Button>
+
+              <Button 
+                onClick={() => {
+                  setShowWorkflowModal(true)
+                  setVoiceMode(true)
+                }}
+                variant="outline"
+                className={isVoiceSpeaking ? "animate-pulse" : ""}
+              >
+                🎤 Voice Mode
               </Button>
 
               <Button
@@ -1560,10 +1582,14 @@ IMPORTANT: Use the customer data provided above. Do NOT generate fake names, ord
 
       <WorkflowInputModal
         open={showWorkflowModal}
-        onOpenChange={setShowWorkflowModal}
+        onOpenChange={(open) => {
+          setShowWorkflowModal(open)
+          if (!open) setVoiceMode(false)
+        }}
         onSubmit={handleGenerateWorkflow}
         initialGoal={workflowConfig.goal}
         initialApiKeys={workflowConfig.apiKeys}
+        voiceMode={voiceMode}
       />
 
       <CodePreviewModal
