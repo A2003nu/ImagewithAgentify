@@ -1,6 +1,37 @@
 import { NextRequest, NextResponse } from "next/server";
 import { groq } from "@/config/GroqModel";
 
+const parseConfidence = (raw: string): { output: string; confidence: number; reason: string } => {
+  const defaultResult = {
+    output: raw,
+    confidence: 75,
+    reason: "Unable to assess confidence"
+  };
+
+  if (!raw) return defaultResult;
+
+  try {
+    const jsonMatch = raw.match(/\{[\s\S]*\}$/);
+
+    if (jsonMatch) {
+      const parsed = JSON.parse(jsonMatch[0]);
+      const confidence = typeof parsed.confidence === "number"
+        ? Math.max(0, Math.min(100, parsed.confidence))
+        : 75;
+      const reason = typeof parsed.reason === "string" && parsed.reason.length > 0
+        ? parsed.reason.substring(0, 100)
+        : "Unable to assess confidence";
+      const cleanOutput = raw.replace(jsonMatch[0], "").trim();
+
+      return { output: cleanOutput || raw, confidence, reason };
+    }
+
+    return { ...defaultResult, output: raw };
+  } catch {
+    return { ...defaultResult, output: raw };
+  }
+};
+
 const safeGroqCall = async (messages: any[]) => {
   try {
     const result = await groq.chat.completions.create({
@@ -155,11 +186,15 @@ ${userDataInjection}
 
       console.log("📤 Direct Output:", directResponse.substring(0, 200) + "...");
 
+      const { output, confidence, reason } = parseConfidence(directResponse);
+
       return NextResponse.json({
         success: true,
-        reply: directResponse,
+        reply: output,
         mode: "direct",
         source: "llm",
+        confidence,
+        reason,
       });
     }
 
@@ -310,10 +345,14 @@ FORMAT:
       console.log("✅ No tool needed - returning LLM response directly");
       console.log("📤 Output:", responseText.substring(0, 200) + "...");
       
+      const { output, confidence, reason } = parseConfidence(responseText);
+
       return NextResponse.json({
         success: true,
-        reply: responseText,
+        reply: output,
         source: "llm",
+        confidence,
+        reason,
       });
     }
 
@@ -612,6 +651,8 @@ Rules:
         success: true,
         reply: fallbackText,
         source: "llm",
+        confidence: 70,
+        reason: "LLM fallback with no API key",
       });
     }
 
@@ -778,12 +819,15 @@ ${JSON.stringify(minimalData)}
 
     console.log("🎯 FINAL OUTPUT WITH INPUT:", finalResponse.choices[0]?.message?.content?.substring(0, 200) + "...");
 
+    const finalOutput = finalResponse.choices[0]?.message?.content ?? "No response";
+    const { output, confidence, reason } = parseConfidence(finalOutput);
+
     return NextResponse.json({
       success: true,
-      reply:
-        finalResponse.choices[0]?.message?.content ??
-        "No response",
+      reply: output,
       source: "api",
+      confidence,
+      reason,
     });
 
   } catch (error) {

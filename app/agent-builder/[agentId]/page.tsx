@@ -63,6 +63,34 @@ const renderOutputWithLinks = (output: string) => {
   })
 }
 
+interface ConfidenceResult {
+  confidence: number
+  reason: string
+}
+
+const normalizeConfidence = (response: any): ConfidenceResult => {
+  const confidence = response?.confidence
+  const reason = response?.reason
+
+  if (confidence !== undefined) {
+    return { confidence, reason: reason || "LLM confidence" }
+  }
+
+  if (response?.type === "image") {
+    return { confidence: 92, reason: "Image generated successfully" }
+  }
+
+  if (response?.type === "api" || response?.success === true) {
+    return { confidence: 96, reason: "API executed successfully" }
+  }
+
+  if (typeof response === "string") {
+    return { confidence: 78, reason: "Generated using LLM fallback" }
+  }
+
+  return { confidence: 60, reason: "Low confidence — unclear output" }
+}
+
 const executeEmailNode = async (
   stepType: string,
   nodeName: string,
@@ -763,7 +791,14 @@ function AgentBuilder() {
   const { userDetail } = useContext(UserDetailContext) as any
   const { agentId } = useParams() as { agentId?: string }
   const [agentDetail, setAgentDetail] = useState<Agent>()
-  const [executionLogs, setExecutionLogs] = useState<{ step: string; output: string; source?: "api" | "llm"; imageUrl?: string }[]>([])
+  const [executionLogs, setExecutionLogs] = useState<{ 
+    step: string; 
+    output: string; 
+    source?: "api" | "llm"; 
+    imageUrl?: string;
+    confidence?: number;
+    reason?: string;
+  }[]>([])
   const [showOutputPanel, setShowOutputPanel] = useState(false)
   const [showWorkflowModal, setShowWorkflowModal] = useState(false)
   const [showCodePreview, setShowCodePreview] = useState(false)
@@ -1184,10 +1219,18 @@ function AgentBuilder() {
       )
     }
 
-    const setNodeStatus = (nodeId: string, status: "idle" | "running" | "success" | "error") => {
+    const setNodeStatus = (
+      nodeId: string, 
+      status: "idle" | "running" | "success" | "error",
+      confidence?: number,
+      reason?: string
+    ) => {
+      console.log(`🔍 [DEBUG] setNodeStatus called:`, { nodeId, status, confidence, reason })
       setAddedNodes((nodes: any[]) =>
         nodes.map((n) =>
-          n.id === nodeId ? { ...n, data: { ...n.data, status } } : n
+          n.id === nodeId 
+            ? { ...n, data: { ...n.data, status, confidence, reason } } 
+            : n
         )
       )
     }
@@ -1223,8 +1266,10 @@ function AgentBuilder() {
             context.emailData = { ...context.emailData, ...emailResult.emailData }
           }
           
-          setNodeStatus(node.id, emailResult.hasError ? "error" : "success")
-          setExecutionLogs((logs) => [...logs, { step: nodeName, output: emailResult.output, source: "llm" }])
+          const emailConfidence = normalizeConfidence({ success: !emailResult.hasError, output: emailResult.output })
+          console.log(`[CONFIDENCE] Email node "${nodeName}":`, emailConfidence)
+          setNodeStatus(node.id, emailResult.hasError ? "error" : "success", emailConfidence.confidence, emailConfidence.reason)
+          setExecutionLogs((logs) => [...logs, { step: nodeName, output: emailResult.output, source: "llm", ...emailConfidence }])
           
           await new Promise((res) => setTimeout(res, 300))
           continue
@@ -1245,8 +1290,10 @@ function AgentBuilder() {
             context.resumeData = { ...context.resumeData, ...resumeResult.resumeData }
           }
           
-          setNodeStatus(node.id, resumeResult.hasError ? "error" : "success")
-          setExecutionLogs((logs) => [...logs, { step: nodeName, output: resumeResult.output, source: "llm" }])
+          const resumeConfidence = normalizeConfidence({ success: !resumeResult.hasError, output: resumeResult.output })
+          console.log(`[CONFIDENCE] Resume node "${nodeName}":`, resumeConfidence)
+          setNodeStatus(node.id, resumeResult.hasError ? "error" : "success", resumeConfidence.confidence, resumeConfidence.reason)
+          setExecutionLogs((logs) => [...logs, { step: nodeName, output: resumeResult.output, source: "llm", ...resumeConfidence }])
           
           await new Promise((res) => setTimeout(res, 300))
           continue
@@ -1308,6 +1355,10 @@ IMPORTANT: Use the customer data provided above. Do NOT generate fake names, ord
 
           const data = await res.json()
 
+          console.log("🔍 [DEBUG] Agent response data:", JSON.stringify(data, null, 2))
+          console.log("🔍 [DEBUG] Confidence value:", data?.confidence)
+          console.log("🔍 [DEBUG] Reason value:", data?.reason)
+
           // Handle image response
           if (data?.type === "image" || data?.imageUrl) {
             context.lastOutput = data.prompt || "Image generated"
@@ -1324,12 +1375,22 @@ IMPORTANT: Use the customer data provided above. Do NOT generate fake names, ord
           }
           
           const logSource = data?.source || "llm"
+          const { confidence: nodeConfidence, reason: nodeReason } = normalizeConfidence(data)
           
-          setNodeStatus(node.id, hasError ? "error" : "success")
+          console.log(`[CONFIDENCE] AgentNode "${nodeName}":`, { confidence: nodeConfidence, reason: nodeReason, response: data })
+          
+          setNodeStatus(node.id, hasError ? "error" : "success", nodeConfidence, nodeReason)
           
           setExecutionLogs((logs) => [
             ...logs,
-            { step: nodeName, output: context.lastOutput || "No output", source: logSource, imageUrl: context.imageUrl },
+            { 
+              step: nodeName, 
+              output: context.lastOutput || "No output", 
+              source: logSource, 
+              imageUrl: context.imageUrl,
+              confidence: nodeConfidence,
+              reason: nodeReason,
+            },
           ])
           
           continue
@@ -1393,21 +1454,25 @@ IMPORTANT: Use the customer data provided above. Do NOT generate fake names, ord
             apiSource = "llm"
           }
           
-          setNodeStatus(node.id, hasError ? "error" : "success")
+          const apiConfidence = normalizeConfidence({ success: !hasError, source: apiSource, output: context.lastOutput })
+          console.log(`[CONFIDENCE] ApiNode "${nodeName}":`, apiConfidence)
+          setNodeStatus(node.id, hasError ? "error" : "success", apiConfidence.confidence, apiConfidence.reason)
           
           setExecutionLogs((logs) => [
             ...logs,
-            { step: nodeName, output: context.lastOutput || "No output", source: apiSource },
+            { step: nodeName, output: context.lastOutput || "No output", source: apiSource, ...apiConfidence },
           ])
           
           continue
         }
 
-        setNodeStatus(node.id, hasError ? "error" : "success")
+        const fallbackConfidence = normalizeConfidence({ success: !hasError, output: context.lastOutput })
+        console.log(`[CONFIDENCE] Fallback "${nodeName}":`, fallbackConfidence)
+        setNodeStatus(node.id, hasError ? "error" : "success", fallbackConfidence.confidence, fallbackConfidence.reason)
         
         setExecutionLogs((logs) => [
           ...logs,
-          { step: nodeName, output: context.lastOutput || "No output", source: "llm" as const },
+          { step: nodeName, output: context.lastOutput || "No output", source: "llm" as const, ...fallbackConfidence },
         ])
         
         await new Promise((res) => setTimeout(res, 300))
@@ -1547,18 +1612,34 @@ IMPORTANT: Use the customer data provided above. Do NOT generate fake names, ord
                           }`}>
                             {log.step}
                           </span>
-                          {log.source && log.step !== "Final Output" && (
-                            <span 
-                              className={`px-2 py-0.5 text-xs rounded-full ${
-                                log.source === "api" 
-                                  ? "bg-green-100 text-green-700" 
-                                  : "bg-purple-100 text-purple-700"
-                              }`}
-                              title={log.source === "api" ? "Fetched from external service" : "Generated by AI model"}
-                            >
-                              {log.source === "api" ? "API" : "LLM"}
-                            </span>
-                          )}
+                          <div className="flex items-center gap-1">
+                            {log.confidence != null && log.step !== "Final Output" && (
+                              <span 
+                                className={`px-2 py-0.5 text-xs rounded-full font-medium ${
+                                  log.confidence >= 70 
+                                    ? "bg-cyan-100 text-cyan-700" 
+                                    : log.confidence >= 40 
+                                      ? "bg-yellow-100 text-yellow-700" 
+                                      : "bg-red-100 text-red-700"
+                                }`}
+                                title={log.reason || "Confidence score"}
+                              >
+                                {log.confidence}%
+                              </span>
+                            )}
+                            {log.source && log.step !== "Final Output" && (
+                              <span 
+                                className={`px-2 py-0.5 text-xs rounded-full ${
+                                  log.source === "api" 
+                                    ? "bg-green-100 text-green-700" 
+                                    : "bg-purple-100 text-purple-700"
+                                }`}
+                                title={log.source === "api" ? "Fetched from external service" : "Generated by AI model"}
+                              >
+                                {log.source === "api" ? "API" : "LLM"}
+                              </span>
+                            )}
+                          </div>
                         </div>
                         {log.imageUrl ? (
                           <div className="mt-2">
