@@ -38,6 +38,8 @@ import { useVoiceOutput } from "@/hooks/useVoiceOutput"
 import { useCinematicCamera } from "@/hooks/useCinematicCamera"
 import CursorGlow from "../_components/CursorGlow"
 import CodePreviewModal from "@/components/CodePreviewModal"
+import { MedicalDisclaimerModal } from "./_components/MedicalDisclaimerModal"
+import { MedicalDisclaimerBanner, MedicalInfoBanner } from "./_components/MedicalBanners"
 
 const renderOutputWithLinks = (output: string) => {
   const urlRegex = /(https?:\/\/[^\s]+)/g
@@ -184,9 +186,23 @@ const RESUME_SCREENING_KEYWORDS = [
   "candidate screening", "resume screening", "evaluate resume", "shortlist candidate"
 ];
 
+const MEDICAL_REPORT_KEYWORDS = [
+  "medical", "health", "symptom", "symptoms", "diagnosis", "doctor",
+  "patient", "hospital", "clinic", "treatment", "sick", "illness",
+  "checkup", "medical report", "health report", "blood test", "x-ray",
+  "mri", "ct scan", "prescription", "medicine", "medication",
+  "fatigue", "pain", "fever", "headache", "nausea", "dizziness",
+  "analyze symptoms", "symptom analysis", "health analysis", "medical analysis"
+];
+
 const isResumeScreeningPrompt = (goal: string): boolean => {
   const lowerGoal = goal.toLowerCase();
   return RESUME_SCREENING_KEYWORDS.some(keyword => lowerGoal.includes(keyword));
+};
+
+const isMedicalReportPrompt = (goal: string): boolean => {
+  const lowerGoal = goal.toLowerCase();
+  return MEDICAL_REPORT_KEYWORDS.some(keyword => lowerGoal.includes(keyword));
 };
 
 // STRICT NO-HALLUCINATION: Only extract what's actually in the resume text
@@ -779,6 +795,276 @@ ${decision.includes("Shortlist") ? "💡 Next Steps:\n• Schedule technical int
   }
 }
 
+const executeMedicalNode = async (
+  stepType: string,
+  nodeName: string,
+  context: {
+    input: string;
+    lastOutput: string | null;
+    medicalData?: any;
+  }
+): Promise<{ output: string; hasError: boolean; medicalData?: any }> => {
+  const { medicalData } = context;
+
+  switch (stepType) {
+    case "SymptomExtractor": {
+      const input = medicalData?.rawInput || context.input;
+      const inputLower = input.toLowerCase();
+      
+      const symptomPatterns = [
+        { pattern: /fatigue|tired|exhausted|tiredness|drained/i, name: "Fatigue" },
+        { pattern: /weight loss|lost weight|losing weight/i, name: "Weight Loss" },
+        { pattern: /fever|high temperature|febrile|chills/i, name: "Fever" },
+        { pattern: /headache|head pain|migraine/i, name: "Headache" },
+        { pattern: /nausea|nauseous|vomiting|sick to stomach/i, name: "Nausea" },
+        { pattern: /dizziness|dizzy|lightheaded|vertigo/i, name: "Dizziness" },
+        { pattern: /pain|ache|sore|stiff/i, name: "Pain" },
+        { pattern: /cough|coughing|respiratory/i, name: "Cough" },
+        { pattern: /breath short|shortness of breath|difficulty breathing|dyspnea/i, name: "Shortness of Breath" },
+        { pattern: /insomnia|can'?t sleep|trouble sleeping|sleep issues/i, name: "Sleep Issues" },
+        { pattern: /appetite|appetite loss|not eating/i, name: "Appetite Changes" },
+      ];
+      
+      const detectedSymptoms = symptomPatterns
+        .filter(s => s.pattern.test(inputLower))
+        .map(s => s.name);
+      
+      const durationMatch = input.match(/(\d+)\s*(week|weeks|month|months|day|days|year|years)/i);
+      const duration = durationMatch ? durationMatch[0] : "Duration not specified";
+      
+      const severityKeywords = {
+        severe: /severe|extreme|very bad|unbearable/i,
+        moderate: /moderate|significant|interfering/i,
+        mild: /mild|slight|minor|minimal/i,
+      };
+      
+      let severity = "Not specified";
+      if (severityKeywords.severe.test(inputLower)) severity = "Severe";
+      else if (severityKeywords.moderate.test(inputLower)) severity = "Moderate";
+      else if (severityKeywords.mild.test(inputLower)) severity = "Mild";
+      
+      return {
+        output: `🏥 Extracted Symptom Data:
+
+📋 Symptoms Identified:
+${detectedSymptoms.length > 0 
+  ? detectedSymptoms.map((s, i) => `• ${i + 1}. ${s}`).join("\n")
+  : "• No specific symptoms detected from input"}
+
+⏱️ Duration: ${duration}
+
+🔢 Severity Level: ${severity}
+
+📝 Raw Input:
+"${input}"
+
+⚠️ Note: This is pattern extraction only. No diagnosis is implied.`,
+        hasError: false,
+        medicalData: { 
+          ...medicalData, 
+          symptoms: detectedSymptoms,
+          duration,
+          severity,
+          rawInput: input,
+          extractionComplete: true
+        }
+      };
+    }
+    
+    case "PatternAnalyzer": {
+      const symptoms = medicalData?.symptoms || [];
+      const symptomStr = symptoms.length > 0 ? symptoms.join(", ") : "General health concern";
+      
+      const generalCategories: Record<string, string[]> = {
+        "Fatigue": ["General fatigue", "Energy depletion", "Metabolic factors", "Sleep disorders", "Nutritional deficiencies"],
+        "Weight Loss": ["Metabolic conditions", "Gastrointestinal issues", "Endocrine factors", "Psychological factors", "Nutritional malabsorption"],
+        "Fever": ["Infection response", "Inflammatory conditions", "Immune system activation", "Environmental factors", "Metabolic reactions"],
+        "Headache": ["Tension-type headache", "Vascular disorders", "Musculoskeletal", "Neurological factors", "Environmental triggers"],
+        "Nausea": ["Gastrointestinal", "Vestibular", "Metabolic", "Medication-induced", "Psychogenic"],
+        "Dizziness": ["Vestibular disorders", "Orthostatic hypotension", "Cardiovascular factors", "Neurological", "Medication effects"],
+        "Pain": ["Musculoskeletal", "Inflammatory", "Neuropathic", "Visceral", "Psychosomatic"],
+      };
+      
+      const associatedCategories = symptoms.flatMap((s: string) => generalCategories[s] || ["General health observation"]).slice(0, 5);
+      
+      return {
+        output: `🔍 Pattern Analysis:
+
+📊 Symptom Pattern: ${symptomStr}
+
+📚 General Medical Categories Commonly Associated With These Symptoms:
+${associatedCategories.map((c: string, i: number) => `• ${c}`).join("\n")}
+
+📖 Analysis Notes:
+• Symptoms mapped to general medical literature categories
+• This is PATTERN ANALYSIS only - NOT diagnosis
+• Actual conditions require professional medical evaluation
+• Multiple factors can produce similar symptom patterns
+
+⚠️ IMPORTANT DISCLAIMER:
+This analysis identifies general patterns. It does NOT indicate any specific disease or condition. Only a qualified healthcare professional can provide proper medical assessment.
+
+🔬 Analysis Method: Pattern matching against general medical literature categories`,
+        hasError: false,
+        medicalData: { 
+          ...medicalData, 
+          patterns: associatedCategories,
+          analysisComplete: true
+        }
+      };
+    }
+    
+    case "RiskFlagger": {
+      const symptoms = medicalData?.symptoms || [];
+      const severity = medicalData?.severity || "Not specified";
+      const duration = medicalData?.duration || "Unknown";
+      
+      const redFlags: { symptom: string; reason: string; urgency: "High" | "Medium" | "Low" }[] = [];
+      
+      const durationMatch = duration.match(/(\d+)\s*(week|month|year)/i);
+      const durationValue = durationMatch ? parseInt(durationMatch[1]) : 0;
+      const durationUnit = durationMatch ? durationMatch[2].toLowerCase() : "";
+      const weeksDuration = durationUnit.includes("week") ? durationValue : 
+                           durationUnit.includes("month") ? durationValue * 4 : 
+                           durationUnit.includes("year") ? durationValue * 52 : 0;
+      
+      if (weeksDuration > 4) {
+        redFlags.push({
+          symptom: "Prolonged Duration (>4 weeks)",
+          reason: "Symptoms lasting more than 4 weeks typically warrant professional evaluation",
+          urgency: "High"
+        });
+      }
+      
+      if (symptoms.includes("Weight Loss") && weeksDuration > 2) {
+        redFlags.push({
+          symptom: "Unexplained Weight Loss",
+          reason: "Persistent weight loss requires medical assessment to rule out underlying conditions",
+          urgency: "High"
+        });
+      }
+      
+      if (symptoms.includes("Shortness of Breath") || symptoms.includes("Dizziness")) {
+        redFlags.push({
+          symptom: "Cardiovascular/Respiratory Symptoms",
+          reason: "These symptoms may indicate cardiac or respiratory issues requiring immediate attention",
+          urgency: "High"
+        });
+      }
+      
+      if (severity === "Severe") {
+        redFlags.push({
+          symptom: "Severe Symptom Intensity",
+          reason: "Severe symptoms should be evaluated by a healthcare professional promptly",
+          urgency: "High"
+        });
+      }
+      
+      if (symptoms.includes("Fever") && weeksDuration > 1) {
+        redFlags.push({
+          symptom: "Prolonged Fever",
+          reason: "Persistent fever lasting more than a week requires medical investigation",
+          urgency: "High"
+        });
+      }
+      
+      if (redFlags.length === 0) {
+        redFlags.push({
+          symptom: "No Critical Red Flags",
+          reason: "Current symptoms do not present immediate emergency indicators",
+          urgency: "Low"
+        });
+      }
+      
+      return {
+        output: `🚨 Red Flag Assessment:
+
+${redFlags.map((flag, i) => `## Flag ${i + 1}: ${flag.symptom}
+• Reason: ${flag.reason}
+• Urgency Level: ${flag.urgency}`).join("\n\n")}
+
+📊 Summary:
+• Total Flags: ${redFlags.length}
+• High Urgency: ${redFlags.filter(f => f.urgency === "High").length}
+• Medium Urgency: ${redFlags.filter(f => f.urgency === "Medium").length}
+• Low Urgency: ${redFlags.filter(f => f.urgency === "Low").length}
+
+⚠️ These flags are based on general medical guidelines. They do NOT constitute a medical diagnosis.`,
+        hasError: false,
+        medicalData: { 
+          ...medicalData, 
+          redFlags,
+          riskAssessmentComplete: true
+        }
+      };
+    }
+    
+    case "RecommendationProvider": {
+      const symptoms = medicalData?.symptoms || [];
+      const redFlags = medicalData?.redFlags || [];
+      const severity = medicalData?.severity || "Not specified";
+      const highUrgencyCount = redFlags.filter((f: any) => f?.urgency === "High").length;
+      
+      let doctorType = "Primary Care Physician";
+      let urgency = "Schedule an appointment within 1-2 weeks";
+      
+      if (highUrgencyCount > 0) {
+        doctorType = "Urgent Care or Emergency Room";
+        urgency = "Seek immediate medical attention";
+      } else if (symptoms.includes("Shortness of Breath") || symptoms.includes("Chest Pain")) {
+        doctorType = "Cardiologist or Emergency Services";
+        urgency = "Seek immediate medical attention";
+      } else if (symptoms.includes("Digestive Issues") || symptoms.includes("Nausea")) {
+        doctorType = "Gastroenterologist";
+        urgency = "Schedule an appointment within 1 week";
+      } else if (symptoms.includes("Neurological Symptoms") || symptoms.includes("Severe Headache")) {
+        doctorType = "Neurologist";
+        urgency = "Schedule an appointment within a few days";
+      }
+      
+      return {
+        output: `💊 Medical Recommendations:
+
+## Recommended Specialist:
+🏥 ${doctorType}
+
+## Suggested Urgency:
+⏰ ${urgency}
+
+## Preparation Steps:
+1. Document all symptoms with onset dates
+2. Note any triggering or alleviating factors
+3. List current medications and supplements
+4. Prepare questions for the healthcare provider
+5. Consider bringing a family member for support
+
+## What to Expect:
+• Medical history review
+• Physical examination
+• Possible diagnostic tests
+• Discussion of treatment options (if applicable)
+
+## Important Reminders:
+⚠️ This is NOT a diagnosis
+⚠️ Only a qualified healthcare professional can provide proper medical assessment
+⚠️ Do NOT self-diagnose or self-prescribe
+⚠️ If symptoms worsen, seek emergency care immediately
+
+🩺 Your next step: ${urgency}`,
+        hasError: false,
+        medicalData: { 
+          ...medicalData, 
+          recommendation: { doctorType, urgency },
+          recommendationComplete: true
+        }
+      };
+    }
+    
+    default:
+      return { output: `Unknown step type: ${stepType}`, hasError: true }
+  }
+}
+
 function AgentBuilder() {
   const {
     addedNodes,
@@ -824,6 +1110,9 @@ function AgentBuilder() {
       delayDays: number;
     };
   }>({ goal: "", apiKeys: {} })
+  const [showMedicalDisclaimer, setShowMedicalDisclaimer] = useState(false)
+  const [medicalDisclaimerAccepted, setMedicalDisclaimerAccepted] = useState(false)
+  const [pendingMedicalRun, setPendingMedicalRun] = useState(false)
 
   const { speak: speakVoice, isSpeaking: isVoiceSpeaking } = useVoiceOutput()
 
@@ -1176,6 +1465,15 @@ function AgentBuilder() {
     }
   }
 
+  const handleMedicalDisclaimerAccept = () => {
+    setMedicalDisclaimerAccepted(true)
+    setShowMedicalDisclaimer(false)
+    if (pendingMedicalRun) {
+      setPendingMedicalRun(false)
+      setTimeout(() => handleRunWorkflow(), 100)
+    }
+  }
+
   const handleRunWorkflow = async () => {
     if (!workflowConfig.goal) {
       toast.error("Please generate a workflow first with a goal")
@@ -1196,11 +1494,18 @@ function AgentBuilder() {
       workflowConfig.goal.toLowerCase().includes("marketing")
     
     const isResumeScreeningWorkflow = isResumeScreeningPrompt(workflowConfig.goal)
+    const isMedicalWorkflow = isMedicalReportPrompt(workflowConfig.goal)
+
+    if (isMedicalWorkflow && !medicalDisclaimerAccepted) {
+      setPendingMedicalRun(true)
+      setShowMedicalDisclaimer(true)
+      return
+    }
 
     const loadingToastId = toast.loading("Running workflow...")
     setShowOutputPanel(true)
 
-    const context: { input: string; lastOutput: string | null; emailData?: any; resumeData?: any; jobRole?: string; imageUrl?: string; imageType?: string } = {
+    const context: { input: string; lastOutput: string | null; emailData?: any; resumeData?: any; jobRole?: string; imageUrl?: string; imageType?: string; medicalData?: any } = {
       input: workflowConfig.goal,
       lastOutput: null,
       emailData: {},
@@ -1208,6 +1513,7 @@ function AgentBuilder() {
       jobRole: workflowConfig.jobRole || "Full Stack Developer",
       imageUrl: undefined,
       imageType: undefined,
+      medicalData: {},
     }
 
     const resetNodeStatuses = () => {
@@ -1294,6 +1600,44 @@ function AgentBuilder() {
           console.log(`[CONFIDENCE] Resume node "${nodeName}":`, resumeConfidence)
           setNodeStatus(node.id, resumeResult.hasError ? "error" : "success", resumeConfidence.confidence, resumeConfidence.reason)
           setExecutionLogs((logs) => [...logs, { step: nodeName, output: resumeResult.output, source: "llm", ...resumeConfidence }])
+          
+          await new Promise((res) => setTimeout(res, 300))
+          continue
+        }
+
+        if (isMedicalReportPrompt(workflowConfig.goal) && stepType && ["SymptomExtractor", "PatternAnalyzer", "RiskFlagger", "RecommendationProvider"].includes(stepType)) {
+          setExecutionLogs((logs) => [...logs, { step: nodeName, output: `⚡ ${nodeName} started...`, source: "llm" }])
+          
+          const medicalResult = await executeMedicalNode(stepType, nodeName, {
+            input: context.input,
+            lastOutput: context.lastOutput,
+            medicalData: { ...context.medicalData, rawInput: context.input },
+          })
+          context.lastOutput = medicalResult.output
+          
+          if (medicalResult.medicalData) {
+            context.medicalData = { ...context.medicalData, ...medicalResult.medicalData }
+          }
+          
+          let medicalConfidence = normalizeConfidence({ success: !medicalResult.hasError, output: medicalResult.output })
+          
+          const confidenceCaps: Record<string, number> = {
+            "SymptomExtractor": 85,
+            "PatternAnalyzer": 70,
+            "RiskFlagger": 85,
+            "RecommendationProvider": 80,
+          };
+          
+          const cap = confidenceCaps[stepType] || 85;
+          medicalConfidence = {
+            ...medicalConfidence,
+            confidence: Math.min(medicalConfidence.confidence, cap),
+            reason: `${medicalConfidence.reason} (capped at ${cap}%)`
+          };
+          
+          console.log(`[CONFIDENCE] Medical node "${nodeName}":`, medicalConfidence)
+          setNodeStatus(node.id, medicalResult.hasError ? "error" : "success", medicalConfidence.confidence, medicalConfidence.reason)
+          setExecutionLogs((logs) => [...logs, { step: nodeName, output: medicalResult.output, source: "llm", ...medicalConfidence }])
           
           await new Promise((res) => setTimeout(res, 300))
           continue
@@ -1591,6 +1935,12 @@ IMPORTANT: Use the customer data provided above. Do NOT generate fake names, ord
                   </button>
                 </div>
                 
+                {isMedicalReportPrompt(workflowConfig.goal) && (
+                  <div className="px-3 pt-3">
+                    <MedicalDisclaimerBanner className="mb-3" />
+                  </div>
+                )}
+                
                 <div className="flex-1 overflow-y-auto p-3 space-y-3">
                   {executionLogs.length === 0 ? (
                     <p className="text-gray-400 text-sm text-center py-8">Run workflow to see output</p>
@@ -1718,6 +2068,12 @@ IMPORTANT: Use the customer data provided above. Do NOT generate fake names, ord
       <UpgradeModal
         isOpen={showUpgrade}
         onClose={() => setShowUpgrade(false)}
+      />
+
+      <MedicalDisclaimerModal
+        open={showMedicalDisclaimer}
+        onOpenChange={setShowMedicalDisclaimer}
+        onAccept={handleMedicalDisclaimerAccept}
       />
     </div>
   )

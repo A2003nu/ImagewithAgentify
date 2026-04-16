@@ -51,6 +51,10 @@ const mapStepTypeToNodeType = (stepType: string): string => {
     Personalizer: "AgentNode",
     Predictor: "AgentNode",
     Action: "ApiNode",
+    SymptomExtractor: "AgentNode",
+    PatternAnalyzer: "AgentNode",
+    RiskFlagger: "AgentNode",
+    RecommendationProvider: "AgentNode",
   };
 
   return typeMap[stepType] || "AgentNode";
@@ -296,6 +300,10 @@ const getNodeColor = (stepType: string): string => {
     Personalizer: "#E0F7FA",
     Predictor: "#FCE4EC",
     Action: "#D4EDDA",
+    SymptomExtractor: "#FFD6D6",
+    PatternAnalyzer: "#FFE4CC",
+    RiskFlagger: "#FFECEC",
+    RecommendationProvider: "#E8F5E9",
   };
 
   return colorMap[stepType] || "#DCF7E3";

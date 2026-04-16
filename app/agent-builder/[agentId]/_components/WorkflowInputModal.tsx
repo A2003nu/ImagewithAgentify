@@ -61,6 +61,12 @@ const detectComplaintWorkflow = (goal: string) => {
   return keywords.some(keyword => g.includes(keyword));
 };
 
+const detectMedicalWorkflow = (goal: string) => {
+  const g = goal.toLowerCase();
+  const keywords = ["medical", "health", "symptom", "symptoms", "diagnosis", "doctor", "patient", "hospital", "clinic", "treatment", "sick", "illness", "checkup", "medical report", "health report", "analyze symptoms", "symptom analysis", "health analysis", "medical analysis", "fatigue", "pain", "fever", "headache"];
+  return keywords.some(keyword => g.includes(keyword));
+};
+
 export function WorkflowInputModal({
   open,
   onOpenChange,
@@ -82,6 +88,7 @@ export function WorkflowInputModal({
   })
   const [isResumeMode, setIsResumeMode] = useState(false)
   const [isComplaintMode, setIsComplaintMode] = useState(false)
+  const [isMedicalMode, setIsMedicalMode] = useState(false)
   const [customerName, setCustomerName] = useState("")
   const [orderId, setOrderId] = useState("")
   const [issueType, setIssueType] = useState("Late Delivery")
@@ -112,6 +119,7 @@ export function WorkflowInputModal({
     setDetectedApis(detectTools(goal))
     setIsResumeMode(detectResumePrompt(goal))
     setIsComplaintMode(detectComplaintWorkflow(goal))
+    setIsMedicalMode(detectMedicalWorkflow(goal))
   }, [goal])
 
   useEffect(() => {
@@ -530,7 +538,40 @@ export function WorkflowInputModal({
             </div>
           )}
 
-          {!isResumeMode && !isComplaintMode && goal.trim() && (detectedApis.weather || detectedApis.news) && (
+          {isMedicalMode && (
+            <div className="space-y-4 p-4 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800">
+              <div className="flex items-center gap-2">
+                <AlertCircle className="h-5 w-5 text-red-500" />
+                <span className="text-sm font-medium text-red-700 dark:text-red-400">
+                  🏥 Medical Report Analysis Mode Activated
+                </span>
+              </div>
+
+              <div className="p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-200 dark:border-amber-800">
+                <p className="text-xs text-amber-700 dark:text-amber-400">
+                  <strong>Important:</strong> This workflow provides pattern analysis only, not medical diagnosis. 
+                  You will need to accept a disclaimer before running. Always consult healthcare professionals.
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  Describe your symptoms or medical concerns
+                </label>
+                <textarea
+                  value={goal}
+                  onChange={(e) => setGoal(e.target.value)}
+                  placeholder="e.g., fatigue, weight loss, 3 weeks"
+                  className="w-full min-h-[100px] p-3 rounded-md border border-input bg-background text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-none"
+                />
+                <p className="text-xs text-gray-500">
+                  Describe symptoms, duration, and any relevant details. Do NOT include personal identifiers.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {!isResumeMode && !isComplaintMode && !isMedicalMode && goal.trim() && (detectedApis.weather || detectedApis.news) && (
             <div className="space-y-3">
               <div className="flex items-center gap-2">
                 <Zap className="h-4 w-4 text-amber-500" />

@@ -20,7 +20,11 @@ export type StepType =
   | "RoleMatcher"
   | "Scorer"
   | "QuestionGenerator"
-  | "DecisionMaker";
+  | "DecisionMaker"
+  | "SymptomExtractor"
+  | "PatternAnalyzer"
+  | "RiskFlagger"
+  | "RecommendationProvider";
 
 export type AgentType = 
   | "Planner" 
@@ -54,7 +58,11 @@ export type AgentType =
   | "Output Formatter"
   | "Details Extractor"
   | "Script Generator"
-  | "Viral Reel Generator";
+  | "Viral Reel Generator"
+  | "Symptom Extractor"
+  | "Pattern Analyzer"
+  | "Risk Flag Agent"
+  | "Recommendation Agent";
 
 export type ToolType = "api" | "function" | "condition" | "formatter";
 
@@ -399,5 +407,70 @@ Be specific and base your analysis on the resume content.`
     role: "Generates 3 different viral reel variations",
     capabilities: ["script writing", "hook creation", "variation generation", "hashtag generation"],
     systemPrompt: `You are a viral content creator. Generate EXACTLY 3 different reel variations with unique hooks, scripts, scenes, captions, hashtags, and music ideas. Each reel must be different. Output ONLY valid JSON.`
+  },
+  "Symptom Extractor": {
+    role: "Extracts structured symptom data from medical text",
+    capabilities: ["symptom extraction", "duration analysis", "severity assessment", "medical data parsing"],
+    systemPrompt: `You are a medical text analyzer. Extract symptoms, duration, severity, and relevant details from the input.
+
+RULES:
+- Do NOT diagnose
+- Do NOT infer diseases
+- Only extract structured data
+
+OUTPUT FORMAT:
+- Symptoms list
+- Duration
+- Severity (if mentioned)
+
+CRITICAL: This is for PATTERN ANALYSIS ONLY, not diagnosis.`
+  },
+  "Pattern Analyzer": {
+    role: "Maps symptoms to general medical categories",
+    capabilities: ["pattern recognition", "category mapping", "general associations", "academic analysis"],
+    systemPrompt: `You analyze symptom patterns using general medical literature.
+
+RULES:
+- Do NOT diagnose any disease
+- Do NOT say 'you have X'
+- Instead say 'commonly associated with conditions such as...'
+- Use neutral, academic tone
+
+OUTPUT:
+List of general medical categories associated with symptoms.
+
+CRITICAL: This is PATTERN ANALYSIS only. Never claim diagnosis.`
+  },
+  "Risk Flag Agent": {
+    role: "Identifies red flag symptoms requiring medical attention",
+    capabilities: ["red flag identification", "urgency assessment", "guideline adherence", "safety prioritization"],
+    systemPrompt: `You identify red flag symptoms based on general medical guidelines.
+
+RULES:
+- Do NOT diagnose
+- Only flag symptoms that typically require medical attention
+- Provide short reason for each flag
+
+OUTPUT:
+- List of red flags
+- Reason for each
+
+CRITICAL: Focus on symptoms requiring professional evaluation.`
+  },
+  "Recommendation Agent": {
+    role: "Provides safe non-diagnostic recommendations",
+    capabilities: ["recommendation generation", "specialist routing", "urgency guidance", "professional consultation"],
+    systemPrompt: `You provide safe, non-diagnostic recommendations.
+
+RULES:
+- NEVER diagnose
+- NEVER suggest medication
+- ONLY recommend consulting professionals
+
+OUTPUT:
+- Type of doctor to consult
+- Suggested urgency
+
+CRITICAL: Always emphasize professional medical consultation.`
   }
 };

@@ -47,6 +47,15 @@ const IMAGE_GENERATION_KEYWORDS = [
   "draw a", "create a image", "generate a", "make image", "make a image"
 ];
 
+const MEDICAL_REPORT_KEYWORDS = [
+  "medical", "health", "symptom", "symptoms", "diagnosis", "doctor",
+  "patient", "hospital", "clinic", "treatment", "sick", "illness",
+  "checkup", "medical report", "health report", "blood test", "x-ray",
+  "mri", "ct scan", "prescription", "medicine", "medication",
+  "fatigue", "pain", "fever", "headache", "nausea", "dizziness",
+  "analyze symptoms", "symptom analysis", "health analysis", "medical analysis"
+];
+
 const isEmailMarketingPrompt = (goal: string): boolean => {
   const lowerGoal = goal.toLowerCase();
   return EMAIL_MARKETING_KEYWORDS.some(keyword => lowerGoal.includes(keyword));
@@ -80,6 +89,11 @@ const isViralReelPrompt = (goal: string): boolean => {
 const isImageGenerationPrompt = (goal: string): boolean => {
   const lowerGoal = goal.toLowerCase();
   return IMAGE_GENERATION_KEYWORDS.some(keyword => lowerGoal.includes(keyword));
+};
+
+const isMedicalReportPrompt = (goal: string): boolean => {
+  const lowerGoal = goal.toLowerCase();
+  return MEDICAL_REPORT_KEYWORDS.some(keyword => lowerGoal.includes(keyword));
 };
 
 const generateEmailMarketingWorkflow = (goal: string): WorkflowResult => {
@@ -2172,6 +2186,231 @@ Output as JSON: { "type": "image", "imageUrl": "url", "prompt": "prompt" }`,
   return workflowResult;
 };
 
+const generateMedicalReportWorkflow = (goal: string): WorkflowResult => {
+  return {
+    workflowName: "Medical Report Analysis Agent",
+    description: "AI-powered medical text pattern analysis workflow for symptom extraction and general guidance",
+    goal: goal,
+    steps: [
+      {
+        id: "step-extract-symptoms",
+        name: "Extract Symptoms",
+        type: "SymptomExtractor",
+        description: "Extract structured symptom data from medical text input",
+        agent: {
+          id: "symptom-extractor",
+          name: "Symptom Extractor",
+          instruction: `You are a medical text analyzer. Extract symptoms, duration, severity, and relevant details from the input.
+
+RULES:
+- Do NOT diagnose
+- Do NOT infer diseases
+- Only extract structured data
+
+OUTPUT FORMAT:
+- Symptoms list
+- Duration
+- Severity (if mentioned)
+
+CRITICAL: This is for PATTERN ANALYSIS ONLY, not diagnosis.`,
+          tools: [],
+          model: DEFAULT_AGENT_MODEL,
+          outputFormat: "text"
+        },
+        dependencies: [],
+        next: { success: "step-analyze-patterns", failure: null },
+        config: {}
+      },
+      {
+        id: "step-analyze-patterns",
+        name: "Analyze Patterns",
+        type: "PatternAnalyzer",
+        description: "Map symptoms to general medical categories",
+        agent: {
+          id: "pattern-analyzer",
+          name: "Pattern Analyzer",
+          instruction: `You analyze symptom patterns using general medical literature.
+
+RULES:
+- Do NOT diagnose any disease
+- Do NOT say 'you have X'
+- Instead say 'commonly associated with conditions such as...'
+- Use neutral, academic tone
+
+OUTPUT:
+List of general medical categories associated with symptoms.
+
+CRITICAL: This is PATTERN ANALYSIS only. Never claim diagnosis.`,
+          tools: [],
+          model: DEFAULT_AGENT_MODEL,
+          outputFormat: "text"
+        },
+        dependencies: ["step-extract-symptoms"],
+        next: { success: "step-flag-risks", failure: null },
+        config: {}
+      },
+      {
+        id: "step-flag-risks",
+        name: "Flag Risks",
+        type: "RiskFlagger",
+        description: "Identify red flag symptoms requiring medical attention",
+        agent: {
+          id: "risk-flag-agent",
+          name: "Risk Flag Agent",
+          instruction: `You identify red flag symptoms based on general medical guidelines.
+
+RULES:
+- Do NOT diagnose
+- Only flag symptoms that typically require medical attention
+- Provide short reason for each flag
+
+OUTPUT:
+- List of red flags
+- Reason for each
+
+CRITICAL: Focus on symptoms requiring professional evaluation.`,
+          tools: [],
+          model: DEFAULT_AGENT_MODEL,
+          outputFormat: "text"
+        },
+        dependencies: ["step-analyze-patterns"],
+        next: { success: "step-provide-recommendations", failure: null },
+        config: {}
+      },
+      {
+        id: "step-provide-recommendations",
+        name: "Provide Recommendations",
+        type: "RecommendationProvider",
+        description: "Provide safe non-diagnostic recommendations",
+        agent: {
+          id: "recommendation-agent",
+          name: "Recommendation Agent",
+          instruction: `You provide safe, non-diagnostic recommendations.
+
+RULES:
+- NEVER diagnose
+- NEVER suggest medication
+- ONLY recommend consulting professionals
+
+OUTPUT:
+- Type of doctor to consult
+- Suggested urgency
+
+CRITICAL: Always emphasize professional medical consultation.`,
+          tools: [],
+          model: DEFAULT_AGENT_MODEL,
+          outputFormat: "text"
+        },
+        dependencies: ["step-flag-risks"],
+        next: { success: "step-end", failure: null },
+        config: {}
+      },
+      {
+        id: "step-end",
+        name: "End",
+        type: "End",
+        description: "Analysis completed",
+        dependencies: ["step-provide-recommendations"],
+        next: { success: null, failure: null },
+        config: {}
+      }
+    ],
+    agents: [
+      {
+        id: "symptom-extractor",
+        name: "Symptom Extractor",
+        role: "Extracts structured symptom data from medical text",
+        capabilities: ["symptom extraction", "duration analysis", "severity assessment", "medical data parsing"],
+        tools: [],
+        model: DEFAULT_AGENT_MODEL,
+        systemPrompt: `You are a medical text analyzer. Extract symptoms, duration, severity, and relevant details from the input.
+
+RULES:
+- Do NOT diagnose
+- Do NOT infer diseases
+- Only extract structured data
+
+OUTPUT FORMAT:
+- Symptoms list
+- Duration
+- Severity (if mentioned)
+
+CRITICAL: This is for PATTERN ANALYSIS ONLY, not diagnosis.`
+      },
+      {
+        id: "pattern-analyzer",
+        name: "Pattern Analyzer",
+        role: "Maps symptoms to general medical categories",
+        capabilities: ["pattern recognition", "category mapping", "general associations", "academic analysis"],
+        tools: [],
+        model: DEFAULT_AGENT_MODEL,
+        systemPrompt: `You analyze symptom patterns using general medical literature.
+
+RULES:
+- Do NOT diagnose any disease
+- Do NOT say 'you have X'
+- Instead say 'commonly associated with conditions such as...'
+- Use neutral, academic tone
+
+OUTPUT:
+List of general medical categories associated with symptoms.
+
+CRITICAL: This is PATTERN ANALYSIS only. Never claim diagnosis.`
+      },
+      {
+        id: "risk-flag-agent",
+        name: "Risk Flag Agent",
+        role: "Identifies red flag symptoms requiring medical attention",
+        capabilities: ["red flag identification", "urgency assessment", "guideline adherence", "safety prioritization"],
+        tools: [],
+        model: DEFAULT_AGENT_MODEL,
+        systemPrompt: `You identify red flag symptoms based on general medical guidelines.
+
+RULES:
+- Do NOT diagnose
+- Only flag symptoms that typically require medical attention
+- Provide short reason for each flag
+
+OUTPUT:
+- List of red flags
+- Reason for each
+
+CRITICAL: Focus on symptoms requiring professional evaluation.`
+      },
+      {
+        id: "recommendation-agent",
+        name: "Recommendation Agent",
+        role: "Provides safe non-diagnostic recommendations",
+        capabilities: ["recommendation generation", "specialist routing", "urgency guidance", "professional consultation"],
+        tools: [],
+        model: DEFAULT_AGENT_MODEL,
+        systemPrompt: `You provide safe, non-diagnostic recommendations.
+
+RULES:
+- NEVER diagnose
+- NEVER suggest medication
+- ONLY recommend consulting professionals
+
+OUTPUT:
+- Type of doctor to consult
+- Suggested urgency
+
+CRITICAL: Always emphasize professional medical consultation.`
+      }
+    ],
+    tools: [],
+    dependencies: {
+      "step-extract-symptoms": [],
+      "step-analyze-patterns": ["step-extract-symptoms"],
+      "step-flag-risks": ["step-analyze-patterns"],
+      "step-provide-recommendations": ["step-flag-risks"],
+      "step-end": ["step-provide-recommendations"]
+    },
+    estimatedComplexity: "medium",
+    estimatedSteps: 5
+  };
+};
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
@@ -2390,6 +2629,38 @@ export async function POST(req: NextRequest) {
             generatedAt: new Date().toISOString(),
             model: "image-generation-specialized",
             workflowType: "image-generation",
+            validation: { isValid: true, errors: [], warnings: [] },
+          },
+        },
+        { status: 200 }
+      );
+    }
+
+    if (isMedicalReportPrompt(goal)) {
+      console.log("\n🏥 WORKFLOW STARTED - Medical Report Analysis");
+      console.log("🧾 Full Input Data:", { goal, options });
+      console.log("📋 Medical/health keywords detected");
+      
+      const medicalWorkflow = generateMedicalReportWorkflow(goal);
+      
+      console.log("📦 Nodes to execute:", medicalWorkflow.steps.map(s => s.id));
+      
+      const enrichedResult = enrichWorkflow(medicalWorkflow);
+      
+      console.log("🎯 FINAL WORKFLOW OUTPUT:", {
+        workflowName: enrichedResult.workflowName,
+        steps: enrichedResult.steps.length,
+        agents: enrichedResult.agents.length
+      });
+      
+      return NextResponse.json(
+        {
+          success: true,
+          workflow: enrichedResult,
+          metadata: {
+            generatedAt: new Date().toISOString(),
+            model: "medical-report-specialized",
+            workflowType: "medical-report",
             validation: { isValid: true, errors: [], warnings: [] },
           },
         },

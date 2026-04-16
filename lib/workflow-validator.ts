@@ -315,6 +315,10 @@ const mapStepTypeToNodeType = (stepType: StepType): string => {
     Scorer: "AgentNode",
     QuestionGenerator: "AgentNode",
     DecisionMaker: "AgentNode",
+    SymptomExtractor: "AgentNode",
+    PatternAnalyzer: "AgentNode",
+    RiskFlagger: "AgentNode",
+    RecommendationProvider: "AgentNode",
   };
 
   return typeMap[stepType] || "AgentNode";
@@ -344,6 +348,10 @@ export const generateWorkflowSummary = (workflow: WorkflowResult): string => {
     Scorer: 0,
     QuestionGenerator: 0,
     DecisionMaker: 0,
+    SymptomExtractor: 0,
+    PatternAnalyzer: 0,
+    RiskFlagger: 0,
+    RecommendationProvider: 0,
   };
 
   workflow.steps.forEach((step) => {
@@ -383,6 +391,10 @@ export const generateWorkflowSummary = (workflow: WorkflowResult): string => {
     "Details Extractor": 0,
     "Script Generator": 0,
     "Viral Reel Generator": 0,
+    "Symptom Extractor": 0,
+    "Pattern Analyzer": 0,
+    "Risk Flag Agent": 0,
+    "Recommendation Agent": 0,
   };
 
   workflow.agents.forEach((agent) => {
