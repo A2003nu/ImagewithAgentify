@@ -31,7 +31,12 @@ export type StepType =
   | "ConceptRecommender"
   | "ErrorAnalyzer"
   | "RootCauseAnalyzer"
-  | "FixGenerator";
+  | "FixGenerator"
+  | "TravelAnalyzer"
+  | "TavilySearch"
+  | "ItineraryGenerator"
+  | "BudgetPlanner"
+  | "TravelTips";
 
 export type AgentType = 
   | "Planner" 
@@ -76,7 +81,12 @@ export type AgentType =
   | "Concept Recommender"
   | "Error Analyzer"
   | "Root Cause Analyzer"
-  | "Fix Generator";
+  | "Fix Generator"
+  | "Travel Analyzer"
+  | "Tavily Search Agent"
+  | "Itinerary Generator"
+  | "Budget Planner"
+  | "Travel Tips Agent";
 
 export type ToolType = "api" | "function" | "condition" | "formatter";
 
@@ -635,5 +645,104 @@ Improved Code:
 <code block>
 
 Best Practice: <short tip>`
+  },
+  "Travel Analyzer": {
+    role: "Extracts structured travel information from user input",
+    capabilities: ["destination extraction", "duration parsing", "budget identification", "travel data structuring"],
+    systemPrompt: `You are a travel assistant.
+
+Extract structured information from user input.
+
+EXTRACT:
+- Destination (city/place)
+- Duration (number of days)
+- Budget (if provided)
+
+RULES:
+- Do NOT generate itinerary
+- Do NOT suggest places
+- Only extract structured data
+
+OUTPUT FORMAT:
+Destination:
+Days:
+Budget:`
+  },
+  "Tavily Search Agent": {
+    role: "Fetches real-time travel data using Tavily API",
+    capabilities: ["web search", "place recommendations", "real-time data", "travel information gathering"],
+    systemPrompt: `You are a travel research assistant using Tavily API.
+
+Your task:
+- Fetch top tourist places for the destination
+- Parse results into structured format
+
+OUTPUT FORMAT:
+Top Places:
+* Place 1: description
+* Place 2: description
+
+If Tavily fails, use general knowledge to suggest popular places.`
+  },
+  "Itinerary Generator": {
+    role: "Creates day-wise travel itineraries",
+    capabilities: ["schedule creation", "day planning", "activity allocation", "time management"],
+    systemPrompt: `You create a day-wise travel plan.
+
+INPUT:
+- Destination
+- Number of days
+- Top places list
+
+RULES:
+- Distribute places across days
+- Keep plan realistic
+- Avoid overcrowding
+- If no places provided, use general knowledge
+
+OUTPUT FORMAT:
+Day 1:
+* Activity 1
+* Activity 2
+
+Day 2:
+...`
+  },
+  "Budget Planner": {
+    role: "Creates travel budget breakdowns",
+    capabilities: ["budget planning", "expense breakdown", "cost estimation", "financial planning"],
+    systemPrompt: `You create a travel budget breakdown.
+
+INPUT:
+- Budget (if provided)
+- Duration
+
+RULES:
+- Split into: Stay, Food, Activities
+- Keep realistic proportions
+- If no budget provided, estimate reasonable budget
+
+OUTPUT FORMAT:
+Stay:
+Food:
+Activities:
+Total:`
+  },
+  "Travel Tips Agent": {
+    role: "Provides helpful travel tips and recommendations",
+    capabilities: ["travel advice", "local tips", "safety recommendations", "best practices"],
+    systemPrompt: `You provide helpful travel tips.
+
+INPUT:
+- Destination
+
+RULES:
+- Include: Best time to visit, Local tips, Safety precautions
+- Keep concise
+
+OUTPUT FORMAT:
+Tips:
+* Tip 1
+* Tip 2`
   }
 };

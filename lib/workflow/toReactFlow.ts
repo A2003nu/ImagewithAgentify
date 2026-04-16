@@ -62,6 +62,11 @@ const mapStepTypeToNodeType = (stepType: string): string => {
     ErrorAnalyzer: "AgentNode",
     RootCauseAnalyzer: "AgentNode",
     FixGenerator: "AgentNode",
+    TravelAnalyzer: "AgentNode",
+    TavilySearch: "ApiNode",
+    ItineraryGenerator: "AgentNode",
+    BudgetPlanner: "AgentNode",
+    TravelTips: "AgentNode",
   };
 
   return typeMap[stepType] || "AgentNode";
@@ -318,6 +323,11 @@ const getNodeColor = (stepType: string): string => {
     ErrorAnalyzer: "#FFE4E4",
     RootCauseAnalyzer: "#FFF3E0",
     FixGenerator: "#E8F5E9",
+    TravelAnalyzer: "#E0F7FA",
+    TavilySearch: "#E8F5E9",
+    ItineraryGenerator: "#F3E5F5",
+    BudgetPlanner: "#FFF8E1",
+    TravelTips: "#FCE4EC",
   };
 
   return colorMap[stepType] || "#DCF7E3";

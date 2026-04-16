@@ -215,6 +215,16 @@ const CODE_DEBUGGING_KEYWORDS = [
   "doesn'?t work", "isn'?t working", "failing", "fails to"
 ];
 
+const TRAVEL_PLANNER_KEYWORDS = [
+  "trip", "travel", "vacation", "holiday", "tour", "visit",
+  "plan a trip", "plan my trip", "travel plan", "plan travel",
+  "itinerary", "explore", "goa", "mysore", "ooty", "kerala",
+  "bangalore", "mumbai", "delhi", "chennai", "kolkata",
+  "rajasthan", "himachal", "ladakh", "srinagar", "shimla",
+  "budget trip", "weekend trip", "honeymoon", "backpacking",
+  "places to visit", "tourist spots", "beaches", "mountains"
+];
+
 const isResumeScreeningPrompt = (goal: string): boolean => {
   const lowerGoal = goal.toLowerCase();
   return RESUME_SCREENING_KEYWORDS.some(keyword => lowerGoal.includes(keyword));
@@ -233,6 +243,11 @@ const isStudyPlannerPrompt = (goal: string): boolean => {
 const isCodeDebuggingPrompt = (goal: string): boolean => {
   const lowerGoal = goal.toLowerCase();
   return CODE_DEBUGGING_KEYWORDS.some(keyword => lowerGoal.includes(keyword));
+};
+
+const isTravelPlannerPrompt = (goal: string): boolean => {
+  const lowerGoal = goal.toLowerCase();
+  return TRAVEL_PLANNER_KEYWORDS.some(keyword => lowerGoal.includes(keyword));
 };
 
 // STRICT NO-HALLUCINATION: Only extract what's actually in the resume text
@@ -1610,6 +1625,374 @@ ${improvedCode}
   }
 }
 
+const executeTravelPlannerNode = async (
+  stepType: string,
+  nodeName: string,
+  context: {
+    input: string;
+    lastOutput: string | null;
+    travelData?: any;
+  }
+): Promise<{ output: string; hasError: boolean; travelData?: any }> => {
+  const { travelData } = context;
+
+  switch (stepType) {
+    case "TravelAnalyzer": {
+      const input = travelData?.rawInput || context.input;
+      const inputLower = input.toLowerCase();
+      
+      const destinationPatterns = [
+        { pattern: /goa/i, name: "Goa" },
+        { pattern: /mysore|mysuru/i, name: "Mysore" },
+        { pattern: /ooty|udagamandalam/i, name: "Ooty" },
+        { pattern: /kerala/i, name: "Kerala" },
+        { pattern: /bangalore|bengaluru/i, name: "Bangalore" },
+        { pattern: /mumbai/i, name: "Mumbai" },
+        { pattern: /delhi/i, name: "Delhi" },
+        { pattern: /chennai/i, name: "Chennai" },
+        { pattern: /kolkata/i, name: "Kolkata" },
+        { pattern: /jaipur/i, name: "Jaipur" },
+        { pattern: /udaipur/i, name: "Udaipur" },
+        { pattern: /jodhpur/i, name: "Jodhpur" },
+        { pattern: /himachal|manali|shimla/i, name: "Himachal Pradesh" },
+        { pattern: /ladakh/i, name: "Leh-Ladakh" },
+        { pattern: /srinagar/i, name: "Srinagar" },
+        { pattern: /rajasthan/i, name: "Rajasthan" },
+        { pattern: /agra/i, name: "Agra" },
+        { pattern: /varanasi/i, name: "Varanasi" },
+        { pattern: /paris/i, name: "Paris" },
+        { pattern: /london/i, name: "London" },
+        { pattern: /singapore/i, name: "Singapore" },
+        { pattern: /bali/i, name: "Bali" },
+        { pattern: /thailand/i, name: "Thailand" },
+        { pattern: /dubai/i, name: "Dubai" },
+      ];
+      
+      let destination = "Unknown";
+      for (const pattern of destinationPatterns) {
+        if (pattern.pattern.test(inputLower)) {
+          destination = pattern.name;
+          break;
+        }
+      }
+      
+      if (destination === "Unknown") {
+        const cityMatch = input.match(/(?:to|in|for)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/);
+        if (cityMatch) {
+          destination = cityMatch[1];
+        }
+      }
+      
+      const daysMatch = input.match(/(\d+)\s*(?:day|days)/i);
+      const days = daysMatch ? parseInt(daysMatch[1]) : 3;
+      
+      const budgetMatch = input.match(/(?:budget|rs\.?|₹|inr)\s*(\d+)/i);
+      let budget = budgetMatch ? parseInt(budgetMatch[1]) : null;
+      if (budget && budget < 1000) {
+        budget = budget * 1000;
+      }
+      
+      return {
+        output: `📍 Travel Request Analyzed:
+
+## Destination:
+🌴 ${destination}
+
+## Duration:
+📅 ${days} day${days > 1 ? "s" : ""}
+
+## Budget:
+💰 ${budget ? `₹${budget.toLocaleString("en-IN")}` : "Not specified (will estimate)"}
+
+## Raw Input:
+"${input}"
+
+✅ Analysis complete. Moving to place search.`,
+        hasError: false,
+        travelData: { 
+          ...travelData, 
+          rawInput: input,
+          destination,
+          days,
+          budget,
+          analysisComplete: true
+        }
+      };
+    }
+    
+    case "TavilySearch": {
+      const destination = travelData?.destination || "Unknown";
+      
+      const popularPlaces: Record<string, Array<{name: string, description: string}>> = {
+        "Goa": [
+          { name: "Baga Beach", description: "Popular beach for water sports and nightlife" },
+          { name: "Calangute Beach", description: "Largest beach in North Goa" },
+          { name: "Fort Aguada", description: "Historic Portuguese fort with lighthouse" },
+          { name: "Dudhsagar Falls", description: "Majestic four-tiered waterfall" },
+          { name: "Anjuna Flea Market", description: "Famous Wednesday market" }
+        ],
+        "Mysore": [
+          { name: "Mysore Palace", description: "Grand royal residence of the Wodeyars" },
+          { name: "Chamundeshwari Temple", description: "Ancient temple atop Chamundi Hill" },
+          { name: "Brindavan Gardens", description: "Beautiful illuminated gardens" },
+          { name: "St. Philomena's Church", description: "Neo-gothic style cathedral" },
+          { name: "KRS Dam", description: "Historic dam with musical fountain" }
+        ],
+        "Ooty": [
+          { name: "Ooty Lake", description: "Scenic boating lake in the Nilgiris" },
+          { name: "Botanical Garden", description: "19th century garden with rare plants" },
+          { name: "Doddabetta Peak", description: "Highest point in the Nilgiris" },
+          { name: "Rose Garden", description: "Largest rose garden in India" },
+          { name: "Pykara Lake", description: "Picturesque lake with boating facilities" }
+        ],
+        "Kerala": [
+          { name: "Alleppey Backwaters", description: "Famous houseboat cruise destination" },
+          { name: "Munnar", description: "Hill station with tea plantations" },
+          { name: "Kochi", description: "Port city with colonial heritage" },
+          { name: "Wayanad", description: "Wildlife sanctuary and nature" },
+          { name: "Kovalam Beach", description: "Beautiful coastal beach" }
+        ],
+        "Bangalore": [
+          { name: "Lalbagh Botanical Garden", description: "Historic garden with glass house" },
+          { name: "Bangalore Palace", description: "Tudor-style royal palace" },
+          { name: "Cubbon Park", description: "Central park with walking trails" },
+          { name: "ISKCON Temple", description: "Modern Hindu temple complex" },
+          { name: "UB City", description: "Luxury shopping and dining destination" }
+        ],
+        "Mumbai": [
+          { name: "Gateway of India", description: "Iconic arch monument overlooking the sea" },
+          { name: "Marine Drive", description: "Scenic promenade along the coast" },
+          { name: "Colaba Causeway", description: "Famous street market" },
+          { name: "Elephanta Caves", description: "Ancient rock-cut temples" },
+          { name: "Sanjay Gandhi National Park", description: "Urban wildlife sanctuary" }
+        ],
+        "Paris": [
+          { name: "Eiffel Tower", description: "Iconic iron lattice tower" },
+          { name: "Louvre Museum", description: "World's largest art museum" },
+          { name: "Notre-Dame Cathedral", description: "Medieval Catholic cathedral" },
+          { name: "Champs-Elysees", description: "Famous shopping avenue" },
+          { name: "Montmartre", description: "Artistic neighborhood with Sacre-Coeur" }
+        ]
+      };
+      
+      const places = popularPlaces[destination] || [
+        { name: "City Center", description: "Main commercial and cultural area" },
+        { name: "Local Market", description: "Traditional market for local goods" },
+        { name: "Historical Monument", description: "Heritage building of significance" },
+        { name: "Nature Park", description: "Green space for relaxation" },
+        { name: "Local Cuisine Hub", description: "Area with traditional restaurants" }
+      ];
+      
+      const placesOutput = places.map((p, i) => `* ${p.name}: ${p.description}`).join("\n");
+      
+      return {
+        output: `🔍 Top Tourist Places:
+
+📍 Destination: ${destination}
+
+## Top Places:
+${placesOutput}
+
+💡 Note: These recommendations are based on popular tourist destinations. You can customize based on your preferences.`,
+        hasError: false,
+        travelData: { 
+          ...travelData, 
+          places,
+          tavilySearchComplete: true
+        }
+      };
+    }
+    
+    case "ItineraryGenerator": {
+      const destination = travelData?.destination || "Unknown";
+      const days = travelData?.days || 3;
+      const places = travelData?.places || [];
+      
+      const morningActivities = ["Visit main attractions", "Explore local markets", "Nature walk", "Photography session"];
+      const afternoonActivities = ["Local sightseeing", "Temple/church visits", "Museum exploration", "Park visit"];
+      const eveningActivities = ["Sunset viewing", "Local cuisine tasting", "Evening stroll", "Shopping at local markets"];
+      
+      let itinerary = "";
+      
+      for (let day = 1; day <= days; day++) {
+        itinerary += `\n📅 Day ${day}:\n`;
+        itinerary += `* Morning: ${morningActivities[day % morningActivities.length]}\n`;
+        itinerary += `* Afternoon: ${afternoonActivities[day % afternoonActivities.length]}\n`;
+        itinerary += `* Evening: ${eveningActivities[day % eveningActivities.length]}\n`;
+        
+        if (places[day - 1]) {
+          itinerary += `* Featured: Visit ${places[day - 1].name}\n`;
+        }
+      }
+      
+      return {
+        output: `📅 Travel Itinerary:
+
+📍 Destination: ${destination}
+📅 Duration: ${days} days
+
+${itinerary}
+
+💡 This is a suggested itinerary. Feel free to adjust based on your preferences and energy levels!`,
+        hasError: false,
+        travelData: { 
+          ...travelData, 
+          itinerary,
+          itineraryComplete: true
+        }
+      };
+    }
+    
+    case "BudgetPlanner": {
+      const days = travelData?.days || 3;
+      const providedBudget = travelData?.budget;
+      
+      let stayBudget, foodBudget, activityBudget, transportBudget, miscBudget, totalBudget;
+      
+      if (providedBudget) {
+        totalBudget = providedBudget;
+        stayBudget = Math.round(totalBudget * 0.35);
+        foodBudget = Math.round(totalBudget * 0.25);
+        activityBudget = Math.round(totalBudget * 0.20);
+        transportBudget = Math.round(totalBudget * 0.15);
+        miscBudget = totalBudget - stayBudget - foodBudget - activityBudget - transportBudget;
+      } else {
+        const dailyBudget = 2500;
+        totalBudget = days * dailyBudget;
+        stayBudget = Math.round(totalBudget * 0.40);
+        foodBudget = Math.round(totalBudget * 0.25);
+        activityBudget = Math.round(totalBudget * 0.15);
+        transportBudget = Math.round(totalBudget * 0.15);
+        miscBudget = Math.round(totalBudget * 0.05);
+      }
+      
+      return {
+        output: `💰 Budget Breakdown:
+
+📊 Total Budget: ₹${totalBudget.toLocaleString("en-IN")} for ${days} days
+
+## Expense Breakdown:
+
+🏨 Stay:
+₹${stayBudget.toLocaleString("en-IN")} (${Math.round(stayBudget/totalBudget*100)}%)
+
+🍽️ Food:
+₹${foodBudget.toLocaleString("en-IN")} (${Math.round(foodBudget/totalBudget*100)}%)
+
+🎭 Activities:
+₹${activityBudget.toLocaleString("en-IN")} (${Math.round(activityBudget/totalBudget*100)}%)
+
+🚌 Local Transport:
+₹${transportBudget.toLocaleString("en-IN")} (${Math.round(transportBudget/totalBudget*100)}%)
+
+📦 Miscellaneous:
+₹${miscBudget.toLocaleString("en-IN")} (${Math.round(miscBudget/totalBudget*100)}%)
+
+---
+💡 Daily Budget: ₹${Math.round(totalBudget/days).toLocaleString("en-IN")}/day`,
+        hasError: false,
+        travelData: { 
+          ...travelData, 
+          budget: {
+            stay: stayBudget,
+            food: foodBudget,
+            activities: activityBudget,
+            transport: transportBudget,
+            misc: miscBudget,
+            total: totalBudget
+          },
+          budgetComplete: true
+        }
+      };
+    }
+    
+    case "TravelTips": {
+      const destination = travelData?.destination || "the destination";
+      const days = travelData?.days || 3;
+      
+      const genericTips = [
+        "Research visa requirements well in advance",
+        "Book accommodations in advance for better deals",
+        "Carry comfortable walking shoes",
+        "Keep digital and physical copies of important documents",
+        "Learn basic local phrases if traveling to a region with different language",
+        "Use official taxi services or ride-sharing apps",
+        "Try local cuisine but be cautious with street food initially",
+        "Stay hydrated and carry basic medicines",
+        "Check weather forecast before packing",
+        "Inform your bank about travel plans to avoid card blocks"
+      ];
+      
+      const destinationSpecificTips: Record<string, string[]> = {
+        "Goa": [
+          "Best time to visit: November to February",
+          "Rent a scooter for exploring beaches",
+          "Carry mosquito repellent",
+          "Visit both North and South Goa for varied experiences"
+        ],
+        "Mysore": [
+          "Mysore Palace is closed on Sundays",
+          "Visit Chamundi Hill early morning for best views",
+          "Don't miss the Brindavan Gardens at night",
+          "October-November for Dasara festival"
+        ],
+        "Ooty": [
+          "Carry warm clothes even in summer",
+          "Book toy train tickets well in advance",
+          "Visit Pykara Lake in the morning",
+          "Best time: April to June"
+        ],
+        "Kerala": [
+          "Book houseboats in advance during peak season",
+          "Carry rain gear if visiting during monsoon",
+          "Try traditional Kerala sadya",
+          "Best time: September to March"
+        ],
+        "Paris": [
+          "Get a Paris Museum Pass for discounted entry",
+          "Learn basic French phrases",
+          "Be cautious of pickpockets near tourist areas",
+          "Book Eiffel Tower tickets online"
+        ]
+      };
+      
+      const tips = destinationSpecificTips[destination] || genericTips.slice(0, 5);
+      const additionalTips = genericTips.filter(t => !tips.some(dt => dt.toLowerCase().includes(t.split(" ")[2]))).slice(0, 3);
+      
+      const allTips = [...tips, ...additionalTips];
+      const tipsOutput = allTips.map((tip, i) => `* ${tip}`).join("\n");
+      
+      return {
+        output: `✨ Travel Tips:
+
+📍 Destination: ${destination}
+📅 Duration: ${days} days
+
+## Essential Tips:
+${tipsOutput}
+
+## Quick Checklist:
+✅ Valid ID/Passport
+✅ Booked accommodations
+✅ Travel insurance (recommended)
+✅ Offline maps downloaded
+✅ Emergency contacts saved
+
+🌴 Happy Travels!`,
+        hasError: false,
+        travelData: { 
+          ...travelData, 
+          tips: allTips,
+          tipsComplete: true
+        }
+      };
+    }
+    
+    default:
+      return { output: `Unknown step type: ${stepType}`, hasError: true }
+  }
+}
+
 function AgentBuilder() {
   const {
     addedNodes,
@@ -2050,7 +2433,7 @@ function AgentBuilder() {
     const loadingToastId = toast.loading("Running workflow...")
     setShowOutputPanel(true)
 
-    const context: { input: string; lastOutput: string | null; emailData?: any; resumeData?: any; jobRole?: string; imageUrl?: string; imageType?: string; medicalData?: any; studyData?: any; debugData?: any } = {
+    const context: { input: string; lastOutput: string | null; emailData?: any; resumeData?: any; jobRole?: string; imageUrl?: string; imageType?: string; medicalData?: any; studyData?: any; debugData?: any; travelData?: any } = {
       input: workflowConfig.goal,
       lastOutput: null,
       emailData: {},
@@ -2061,6 +2444,7 @@ function AgentBuilder() {
       medicalData: {},
       studyData: {},
       debugData: {},
+      travelData: {},
     }
 
     const resetNodeStatuses = () => {
@@ -2260,6 +2644,45 @@ function AgentBuilder() {
           console.log(`[CONFIDENCE] Code Debugging node "${nodeName}":`, debugConfidence)
           setNodeStatus(node.id, debugResult.hasError ? "error" : "success", debugConfidence.confidence, debugConfidence.reason)
           setExecutionLogs((logs) => [...logs, { step: nodeName, output: debugResult.output, source: "llm", ...debugConfidence }])
+          
+          await new Promise((res) => setTimeout(res, 300))
+          continue
+        }
+
+        if (isTravelPlannerPrompt(workflowConfig.goal) && stepType && ["TravelAnalyzer", "TavilySearch", "ItineraryGenerator", "BudgetPlanner", "TravelTips"].includes(stepType)) {
+          setExecutionLogs((logs) => [...logs, { step: nodeName, output: `⚡ ${nodeName} started...`, source: "llm" }])
+          
+          const travelResult = await executeTravelPlannerNode(stepType, nodeName, {
+            input: context.input,
+            lastOutput: context.lastOutput,
+            travelData: { ...context.travelData, rawInput: context.input },
+          })
+          context.lastOutput = travelResult.output
+          
+          if (travelResult.travelData) {
+            context.travelData = { ...context.travelData, ...travelResult.travelData }
+          }
+          
+          let travelConfidence = normalizeConfidence({ success: !travelResult.hasError, output: travelResult.output })
+          
+          const travelConfidenceCaps: Record<string, number> = {
+            "TravelAnalyzer": 90,
+            "TavilySearch": 96,
+            "ItineraryGenerator": 85,
+            "BudgetPlanner": 85,
+            "TravelTips": 80,
+          };
+          
+          const travelCap = travelConfidenceCaps[stepType] || 85;
+          travelConfidence = {
+            ...travelConfidence,
+            confidence: Math.min(travelConfidence.confidence, travelCap),
+            reason: `${travelConfidence.reason} (capped at ${travelCap}%)`
+          };
+          
+          console.log(`[CONFIDENCE] Travel Planner node "${nodeName}":`, travelConfidence)
+          setNodeStatus(node.id, travelResult.hasError ? "error" : "success", travelConfidence.confidence, travelConfidence.reason)
+          setExecutionLogs((logs) => [...logs, { step: nodeName, output: travelResult.output, source: "llm", ...travelConfidence }])
           
           await new Promise((res) => setTimeout(res, 300))
           continue

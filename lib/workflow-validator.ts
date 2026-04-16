@@ -326,6 +326,11 @@ const mapStepTypeToNodeType = (stepType: StepType): string => {
     ErrorAnalyzer: "AgentNode",
     RootCauseAnalyzer: "AgentNode",
     FixGenerator: "AgentNode",
+    TravelAnalyzer: "AgentNode",
+    TavilySearch: "ApiNode",
+    ItineraryGenerator: "AgentNode",
+    BudgetPlanner: "AgentNode",
+    TravelTips: "AgentNode",
   };
 
   return typeMap[stepType] || "AgentNode";
@@ -366,6 +371,11 @@ export const generateWorkflowSummary = (workflow: WorkflowResult): string => {
     ErrorAnalyzer: 0,
     RootCauseAnalyzer: 0,
     FixGenerator: 0,
+    TravelAnalyzer: 0,
+    TavilySearch: 0,
+    ItineraryGenerator: 0,
+    BudgetPlanner: 0,
+    TravelTips: 0,
   };
 
   workflow.steps.forEach((step) => {
@@ -416,6 +426,11 @@ export const generateWorkflowSummary = (workflow: WorkflowResult): string => {
     "Error Analyzer": 0,
     "Root Cause Analyzer": 0,
     "Fix Generator": 0,
+    "Travel Analyzer": 0,
+    "Tavily Search Agent": 0,
+    "Itinerary Generator": 0,
+    "Budget Planner": 0,
+    "Travel Tips Agent": 0,
   };
 
   workflow.agents.forEach((agent) => {

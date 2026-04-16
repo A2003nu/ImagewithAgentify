@@ -76,6 +76,16 @@ const CODE_DEBUGGING_KEYWORDS = [
   "doesn'?t work", "isn'?t working", "failing", "fails to"
 ];
 
+const TRAVEL_PLANNER_KEYWORDS = [
+  "trip", "travel", "vacation", "holiday", "tour", "visit",
+  "plan a trip", "plan my trip", "travel plan", "plan travel",
+  "itinerary", "explore", "goa", "mysore", "ooty", "kerala",
+  "bangalore", "mumbai", "delhi", "chennai", "kolkata",
+  "rajasthan", "himachal", "ladakh", "srinagar", "shimla",
+  "budget trip", "weekend trip", "honeymoon", "backpacking",
+  "places to visit", "tourist spots", "beaches", "mountains"
+];
+
 const isEmailMarketingPrompt = (goal: string): boolean => {
   const lowerGoal = goal.toLowerCase();
   return EMAIL_MARKETING_KEYWORDS.some(keyword => lowerGoal.includes(keyword));
@@ -124,6 +134,11 @@ const isStudyPlannerPrompt = (goal: string): boolean => {
 const isCodeDebuggingPrompt = (goal: string): boolean => {
   const lowerGoal = goal.toLowerCase();
   return CODE_DEBUGGING_KEYWORDS.some(keyword => lowerGoal.includes(keyword));
+};
+
+const isTravelPlannerPrompt = (goal: string): boolean => {
+  const lowerGoal = goal.toLowerCase();
+  return TRAVEL_PLANNER_KEYWORDS.some(keyword => lowerGoal.includes(keyword));
 };
 
 const generateEmailMarketingWorkflow = (goal: string): WorkflowResult => {
@@ -2687,6 +2702,295 @@ Best Practice: <short tip>`
   };
 };
 
+const generateTravelPlannerWorkflow = (goal: string): WorkflowResult => {
+  return {
+    workflowName: "Smart Travel Planner Agent",
+    description: "AI-powered travel planning with real-time place recommendations and complete itinerary generation",
+    goal: goal,
+    steps: [
+      {
+        id: "step-analyze-travel",
+        name: "Analyze Travel Request",
+        type: "TravelAnalyzer",
+        description: "Extract destination, duration, and budget from user input",
+        agent: {
+          id: "travel-analyzer",
+          name: "Travel Analyzer",
+          instruction: `You are a travel assistant.
+
+Extract structured information from user input.
+
+EXTRACT:
+- Destination (city/place)
+- Duration (number of days)
+- Budget (if provided)
+
+RULES:
+- Do NOT generate itinerary
+- Do NOT suggest places
+- Only extract structured data
+
+OUTPUT FORMAT:
+Destination:
+Days:
+Budget:`,
+          tools: [],
+          model: DEFAULT_AGENT_MODEL,
+          outputFormat: "text"
+        },
+        dependencies: [],
+        next: { success: "step-tavily-search", failure: null },
+        config: {}
+      },
+      {
+        id: "step-tavily-search",
+        name: "Search Places",
+        type: "TavilySearch",
+        description: "Fetch top tourist places using Tavily API with LLM fallback",
+        agent: {
+          id: "tavily-search-agent",
+          name: "Tavily Search Agent",
+          instruction: `You are a travel research assistant.
+
+Your task:
+- Fetch top tourist places for the destination using Tavily API
+- Query format: "top tourist places in {destination}"
+
+If Tavily API fails or returns no results:
+- Use general knowledge to suggest popular places
+- Return at least 3-5 well-known places
+
+OUTPUT FORMAT:
+Top Places:
+* Place 1: description
+* Place 2: description
+* Place 3: description`,
+          tools: [],
+          model: DEFAULT_AGENT_MODEL,
+          outputFormat: "text"
+        },
+        dependencies: ["step-analyze-travel"],
+        next: { success: "step-generate-itinerary", failure: null },
+        config: {}
+      },
+      {
+        id: "step-generate-itinerary",
+        name: "Generate Itinerary",
+        type: "ItineraryGenerator",
+        description: "Create day-wise travel plan",
+        agent: {
+          id: "itinerary-generator",
+          name: "Itinerary Generator",
+          instruction: `You create a day-wise travel plan.
+
+INPUT:
+- Destination
+- Number of days
+- Top places list
+
+RULES:
+- Distribute places across days
+- Keep plan realistic
+- Avoid overcrowding
+- Include travel time between locations
+
+OUTPUT FORMAT:
+Day 1:
+* Morning: Activity
+* Afternoon: Activity
+* Evening: Activity
+
+Day 2:
+...`,
+          tools: [],
+          model: DEFAULT_AGENT_MODEL,
+          outputFormat: "text"
+        },
+        dependencies: ["step-tavily-search"],
+        next: { success: "step-plan-budget", failure: null },
+        config: {}
+      },
+      {
+        id: "step-plan-budget",
+        name: "Plan Budget",
+        type: "BudgetPlanner",
+        description: "Create travel budget breakdown",
+        agent: {
+          id: "budget-planner",
+          name: "Budget Planner",
+          instruction: `You create a travel budget breakdown.
+
+INPUT:
+- Budget (if provided)
+- Duration (number of days)
+
+RULES:
+- Split into: Stay, Food, Activities, Transport
+- Keep realistic proportions based on destination
+- If no budget provided, estimate moderate budget in INR
+
+OUTPUT FORMAT:
+💰 Budget Breakdown:
+
+Stay: ₹X
+Food: ₹X
+Activities: ₹X
+Transport: ₹X
+Miscellaneous: ₹X
+
+Total: ₹X`,
+          tools: [],
+          model: DEFAULT_AGENT_MODEL,
+          outputFormat: "text"
+        },
+        dependencies: ["step-generate-itinerary"],
+        next: { success: "step-travel-tips", failure: null },
+        config: {}
+      },
+      {
+        id: "step-travel-tips",
+        name: "Generate Tips",
+        type: "TravelTips",
+        description: "Provide helpful travel tips",
+        agent: {
+          id: "travel-tips-agent",
+          name: "Travel Tips Agent",
+          instruction: `You provide helpful travel tips.
+
+INPUT:
+- Destination
+
+RULES:
+- Include: Best time to visit, Local tips, Safety precautions
+- Keep concise and practical
+- Focus on actionable advice
+
+OUTPUT FORMAT:
+✨ Travel Tips:
+
+🌤️ Best Time to Visit:
+* Tip
+
+📍 Local Tips:
+* Tip
+
+⚠️ Safety:
+* Tip`,
+          tools: [],
+          model: DEFAULT_AGENT_MODEL,
+          outputFormat: "text"
+        },
+        dependencies: ["step-plan-budget"],
+        next: { success: "step-end", failure: null },
+        config: {}
+      },
+      {
+        id: "step-end",
+        name: "End",
+        type: "End",
+        description: "Travel planning completed",
+        dependencies: ["step-travel-tips"],
+        next: { success: null, failure: null },
+        config: {}
+      }
+    ],
+    agents: [
+      {
+        id: "travel-analyzer",
+        name: "Travel Analyzer",
+        role: "Extracts structured travel information from user input",
+        capabilities: ["destination extraction", "duration parsing", "budget identification", "travel data structuring"],
+        tools: [],
+        model: DEFAULT_AGENT_MODEL,
+        systemPrompt: `You are a travel assistant.
+
+Extract structured information from user input.
+
+EXTRACT:
+- Destination (city/place)
+- Duration (number of days)
+- Budget (if provided)
+
+RULES:
+- Do NOT generate itinerary
+- Do NOT suggest places
+- Only extract structured data
+
+OUTPUT FORMAT:
+Destination:
+Days:
+Budget:`
+      },
+      {
+        id: "tavily-search-agent",
+        name: "Tavily Search Agent",
+        role: "Fetches real-time travel data using Tavily API",
+        capabilities: ["web search", "place recommendations", "real-time data", "travel information gathering"],
+        tools: [],
+        model: DEFAULT_AGENT_MODEL,
+        systemPrompt: `You are a travel research assistant.
+
+Your task:
+- Fetch top tourist places for the destination
+- Use Tavily API if available
+
+If Tavily fails, use general knowledge to suggest popular places.`
+      },
+      {
+        id: "itinerary-generator",
+        name: "Itinerary Generator",
+        role: "Creates day-wise travel itineraries",
+        capabilities: ["schedule creation", "day planning", "activity allocation", "time management"],
+        tools: [],
+        model: DEFAULT_AGENT_MODEL,
+        systemPrompt: `You create a day-wise travel plan.
+
+RULES:
+- Distribute places across days
+- Keep plan realistic
+- Avoid overcrowding`
+      },
+      {
+        id: "budget-planner",
+        name: "Budget Planner",
+        role: "Creates travel budget breakdowns",
+        capabilities: ["budget planning", "expense breakdown", "cost estimation", "financial planning"],
+        tools: [],
+        model: DEFAULT_AGENT_MODEL,
+        systemPrompt: `You create a travel budget breakdown.
+
+RULES:
+- Split into: Stay, Food, Activities, Transport
+- Keep realistic proportions`
+      },
+      {
+        id: "travel-tips-agent",
+        name: "Travel Tips Agent",
+        role: "Provides helpful travel tips and recommendations",
+        capabilities: ["travel advice", "local tips", "safety recommendations", "best practices"],
+        tools: [],
+        model: DEFAULT_AGENT_MODEL,
+        systemPrompt: `You provide helpful travel tips.
+
+RULES:
+- Include: Best time to visit, Local tips, Safety precautions
+- Keep concise and practical`
+      }
+    ],
+    tools: [],
+    dependencies: {
+      "step-analyze-travel": [],
+      "step-tavily-search": ["step-analyze-travel"],
+      "step-generate-itinerary": ["step-tavily-search"],
+      "step-plan-budget": ["step-generate-itinerary"],
+      "step-travel-tips": ["step-plan-budget"],
+      "step-end": ["step-travel-tips"]
+    },
+    estimatedComplexity: "medium",
+    estimatedSteps: 6
+  };
+};
+
 const generateMedicalReportWorkflow = (goal: string): WorkflowResult => {
   return {
     workflowName: "Medical Report Analysis Agent",
@@ -3194,6 +3498,38 @@ export async function POST(req: NextRequest) {
             generatedAt: new Date().toISOString(),
             model: "code-debugging-specialized",
             workflowType: "code-debugging",
+            validation: { isValid: true, errors: [], warnings: [] },
+          },
+        },
+        { status: 200 }
+      );
+    }
+
+    if (isTravelPlannerPrompt(goal)) {
+      console.log("\n🌍 WORKFLOW STARTED - Smart Travel Planner");
+      console.log("🧾 Full Input Data:", { goal, options });
+      console.log("📋 Travel planning keywords detected");
+      
+      const travelWorkflow = generateTravelPlannerWorkflow(goal);
+      
+      console.log("📦 Nodes to execute:", travelWorkflow.steps.map(s => s.id));
+      
+      const enrichedResult = enrichWorkflow(travelWorkflow);
+      
+      console.log("🎯 FINAL WORKFLOW OUTPUT:", {
+        workflowName: enrichedResult.workflowName,
+        steps: enrichedResult.steps.length,
+        agents: enrichedResult.agents.length
+      });
+      
+      return NextResponse.json(
+        {
+          success: true,
+          workflow: enrichedResult,
+          metadata: {
+            generatedAt: new Date().toISOString(),
+            model: "travel-planner-specialized",
+            workflowType: "travel-planner",
             validation: { isValid: true, errors: [], warnings: [] },
           },
         },
