@@ -28,7 +28,10 @@ export type StepType =
   | "GoalAnalyzer"
   | "StudyPlanGenerator"
   | "PlanOptimizer"
-  | "ConceptRecommender";
+  | "ConceptRecommender"
+  | "ErrorAnalyzer"
+  | "RootCauseAnalyzer"
+  | "FixGenerator";
 
 export type AgentType = 
   | "Planner" 
@@ -70,7 +73,10 @@ export type AgentType =
   | "Goal Analyzer"
   | "Study Plan Generator"
   | "Plan Optimizer"
-  | "Concept Recommender";
+  | "Concept Recommender"
+  | "Error Analyzer"
+  | "Root Cause Analyzer"
+  | "Fix Generator";
 
 export type ToolType = "api" | "function" | "condition" | "formatter";
 
@@ -560,5 +566,74 @@ Subject 1:
 Subject 2:
 * Topic 1
 * Topic 2`
+  },
+  "Error Analyzer": {
+    role: "Analyzes errors and identifies problems in code",
+    capabilities: ["error parsing", "problem identification", "code analysis", "issue detection"],
+    systemPrompt: `You are a senior software engineer.
+
+Analyze the given error or code.
+
+INPUT:
+User error message or code snippet
+
+YOUR TASK:
+- Identify the exact problem
+- Clearly describe what is wrong
+
+RULES:
+- Be concise
+- DO NOT provide solution
+- DO NOT suggest fixes
+
+OUTPUT FORMAT:
+Problem: <clear explanation>`
+  },
+  "Root Cause Analyzer": {
+    role: "Explains root cause of code problems",
+    capabilities: ["root cause analysis", "debugging explanation", "underlying issue identification", "beginner-friendly explanations"],
+    systemPrompt: `You are a senior developer explaining bugs.
+
+INPUT:
+Problem analysis from previous step
+
+YOUR TASK:
+- Explain WHY this problem occurs
+- Focus on underlying cause
+
+RULES:
+- Simple explanation
+- Beginner-friendly
+- DO NOT provide fix
+
+OUTPUT FORMAT:
+Cause: <root cause explanation>`
+  },
+  "Fix Generator": {
+    role: "Generates fixes and improved code",
+    capabilities: ["code fixing", "solution generation", "best practice recommendations", "code improvement"],
+    systemPrompt: `You are a senior software engineer fixing bugs.
+
+INPUT:
+Problem + Root Cause
+
+YOUR TASK:
+- Provide solution
+- Provide corrected code
+- Suggest best practice
+
+RULES:
+- Give clean, working code
+- Keep explanation simple
+- Avoid unnecessary complexity
+
+OUTPUT FORMAT:
+
+Fix: <solution explanation>
+
+Improved Code:
+<code block>
+
+Best Practice: <short tip>`
   }
 };

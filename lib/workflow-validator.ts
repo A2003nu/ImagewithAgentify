@@ -323,6 +323,9 @@ const mapStepTypeToNodeType = (stepType: StepType): string => {
     StudyPlanGenerator: "AgentNode",
     PlanOptimizer: "AgentNode",
     ConceptRecommender: "AgentNode",
+    ErrorAnalyzer: "AgentNode",
+    RootCauseAnalyzer: "AgentNode",
+    FixGenerator: "AgentNode",
   };
 
   return typeMap[stepType] || "AgentNode";
@@ -360,6 +363,9 @@ export const generateWorkflowSummary = (workflow: WorkflowResult): string => {
     StudyPlanGenerator: 0,
     PlanOptimizer: 0,
     ConceptRecommender: 0,
+    ErrorAnalyzer: 0,
+    RootCauseAnalyzer: 0,
+    FixGenerator: 0,
   };
 
   workflow.steps.forEach((step) => {
@@ -407,6 +413,9 @@ export const generateWorkflowSummary = (workflow: WorkflowResult): string => {
     "Study Plan Generator": 0,
     "Plan Optimizer": 0,
     "Concept Recommender": 0,
+    "Error Analyzer": 0,
+    "Root Cause Analyzer": 0,
+    "Fix Generator": 0,
   };
 
   workflow.agents.forEach((agent) => {

@@ -65,6 +65,17 @@ const STUDY_PLANNER_KEYWORDS = [
   "class", "course", "subject", "subjects", "semester", "term"
 ];
 
+const CODE_DEBUGGING_KEYWORDS = [
+  "bug", "error", "fix", "debug", "issue", "problem", "crash", "exception",
+  "typeerror", "syntaxerror", "referenceerror", "undefined", "null",
+  "not a function", "cannot read", "unexpected token", "parse error",
+  "undefined is not", "is not defined", "missing", "failed to",
+  "TypeError", "SyntaxError", "ReferenceError", "Error:",
+  "debug this", "debug code", "fix code", "debug my code", "find the bug",
+  "why is this", "what is wrong with", "something went wrong", "not working",
+  "doesn'?t work", "isn'?t working", "failing", "fails to"
+];
+
 const isEmailMarketingPrompt = (goal: string): boolean => {
   const lowerGoal = goal.toLowerCase();
   return EMAIL_MARKETING_KEYWORDS.some(keyword => lowerGoal.includes(keyword));
@@ -108,6 +119,11 @@ const isMedicalReportPrompt = (goal: string): boolean => {
 const isStudyPlannerPrompt = (goal: string): boolean => {
   const lowerGoal = goal.toLowerCase();
   return STUDY_PLANNER_KEYWORDS.some(keyword => lowerGoal.includes(keyword));
+};
+
+const isCodeDebuggingPrompt = (goal: string): boolean => {
+  const lowerGoal = goal.toLowerCase();
+  return CODE_DEBUGGING_KEYWORDS.some(keyword => lowerGoal.includes(keyword));
 };
 
 const generateEmailMarketingWorkflow = (goal: string): WorkflowResult => {
@@ -2455,6 +2471,222 @@ Subject 2:
   };
 };
 
+const generateCodeDebuggingWorkflow = (goal: string): WorkflowResult => {
+  return {
+    workflowName: "Code Debugging Agent",
+    description: "AI-powered code debugging workflow that identifies problems, explains root causes, and generates fixes",
+    goal: goal,
+    steps: [
+      {
+        id: "step-analyze-error",
+        name: "Analyze Error",
+        type: "ErrorAnalyzer",
+        description: "Identify the exact problem in code or error message",
+        agent: {
+          id: "error-analyzer",
+          name: "Error Analyzer",
+          instruction: `You are a senior software engineer.
+
+Analyze the given error or code.
+
+INPUT:
+User error message or code snippet
+
+YOUR TASK:
+- Identify the exact problem
+- Clearly describe what is wrong
+
+RULES:
+- Be concise
+- DO NOT provide solution
+- DO NOT suggest fixes
+
+OUTPUT FORMAT:
+Problem: <clear explanation>`,
+          tools: [],
+          model: DEFAULT_AGENT_MODEL,
+          outputFormat: "text"
+        },
+        dependencies: [],
+        next: { success: "step-analyze-root-cause", failure: null },
+        config: {}
+      },
+      {
+        id: "step-analyze-root-cause",
+        name: "Analyze Root Cause",
+        type: "RootCauseAnalyzer",
+        description: "Explain why the problem occurs",
+        agent: {
+          id: "root-cause-analyzer",
+          name: "Root Cause Analyzer",
+          instruction: `You are a senior developer explaining bugs.
+
+INPUT:
+Problem analysis from previous step
+
+YOUR TASK:
+- Explain WHY this problem occurs
+- Focus on underlying cause
+
+RULES:
+- Simple explanation
+- Beginner-friendly
+- DO NOT provide fix
+
+OUTPUT FORMAT:
+Cause: <root cause explanation>`,
+          tools: [],
+          model: DEFAULT_AGENT_MODEL,
+          outputFormat: "text"
+        },
+        dependencies: ["step-analyze-error"],
+        next: { success: "step-generate-fix", failure: null },
+        config: {}
+      },
+      {
+        id: "step-generate-fix",
+        name: "Generate Fix",
+        type: "FixGenerator",
+        description: "Provide solution and improved code",
+        agent: {
+          id: "fix-generator",
+          name: "Fix Generator",
+          instruction: `You are a senior software engineer fixing bugs.
+
+INPUT:
+Problem + Root Cause
+
+YOUR TASK:
+- Provide solution
+- Provide corrected code
+- Suggest best practice
+
+RULES:
+- Give clean, working code
+- Keep explanation simple
+- Avoid unnecessary complexity
+
+OUTPUT FORMAT:
+
+Fix: <solution explanation>
+
+Improved Code:
+<code block>
+
+Best Practice: <short tip>`,
+          tools: [],
+          model: DEFAULT_AGENT_MODEL,
+          outputFormat: "text"
+        },
+        dependencies: ["step-analyze-root-cause"],
+        next: { success: "step-end", failure: null },
+        config: {}
+      },
+      {
+        id: "step-end",
+        name: "End",
+        type: "End",
+        description: "Debugging completed",
+        dependencies: ["step-generate-fix"],
+        next: { success: null, failure: null },
+        config: {}
+      }
+    ],
+    agents: [
+      {
+        id: "error-analyzer",
+        name: "Error Analyzer",
+        role: "Analyzes errors and identifies problems in code",
+        capabilities: ["error parsing", "problem identification", "code analysis", "issue detection"],
+        tools: [],
+        model: DEFAULT_AGENT_MODEL,
+        systemPrompt: `You are a senior software engineer.
+
+Analyze the given error or code.
+
+INPUT:
+User error message or code snippet
+
+YOUR TASK:
+- Identify the exact problem
+- Clearly describe what is wrong
+
+RULES:
+- Be concise
+- DO NOT provide solution
+- DO NOT suggest fixes
+
+OUTPUT FORMAT:
+Problem: <clear explanation>`
+      },
+      {
+        id: "root-cause-analyzer",
+        name: "Root Cause Analyzer",
+        role: "Explains root cause of code problems",
+        capabilities: ["root cause analysis", "debugging explanation", "underlying issue identification", "beginner-friendly explanations"],
+        tools: [],
+        model: DEFAULT_AGENT_MODEL,
+        systemPrompt: `You are a senior developer explaining bugs.
+
+INPUT:
+Problem analysis from previous step
+
+YOUR TASK:
+- Explain WHY this problem occurs
+- Focus on underlying cause
+
+RULES:
+- Simple explanation
+- Beginner-friendly
+- DO NOT provide fix
+
+OUTPUT FORMAT:
+Cause: <root cause explanation>`
+      },
+      {
+        id: "fix-generator",
+        name: "Fix Generator",
+        role: "Generates fixes and improved code",
+        capabilities: ["code fixing", "solution generation", "best practice recommendations", "code improvement"],
+        tools: [],
+        model: DEFAULT_AGENT_MODEL,
+        systemPrompt: `You are a senior software engineer fixing bugs.
+
+INPUT:
+Problem + Root Cause
+
+YOUR TASK:
+- Provide solution
+- Provide corrected code
+- Suggest best practice
+
+RULES:
+- Give clean, working code
+- Keep explanation simple
+- Avoid unnecessary complexity
+
+OUTPUT FORMAT:
+
+Fix: <solution explanation>
+
+Improved Code:
+<code block>
+
+Best Practice: <short tip>`
+      }
+    ],
+    tools: [],
+    dependencies: {
+      "step-analyze-error": [],
+      "step-analyze-root-cause": ["step-analyze-error"],
+      "step-generate-fix": ["step-analyze-root-cause"],
+      "step-end": ["step-generate-fix"]
+    },
+    estimatedComplexity: "low",
+    estimatedSteps: 4
+  };
+};
+
 const generateMedicalReportWorkflow = (goal: string): WorkflowResult => {
   return {
     workflowName: "Medical Report Analysis Agent",
@@ -2930,6 +3162,38 @@ export async function POST(req: NextRequest) {
             generatedAt: new Date().toISOString(),
             model: "study-planner-specialized",
             workflowType: "study-planner",
+            validation: { isValid: true, errors: [], warnings: [] },
+          },
+        },
+        { status: 200 }
+      );
+    }
+
+    if (isCodeDebuggingPrompt(goal)) {
+      console.log("\n💻 WORKFLOW STARTED - Code Debugging");
+      console.log("🧾 Full Input Data:", { goal, options });
+      console.log("📋 Code debugging keywords detected");
+      
+      const codeWorkflow = generateCodeDebuggingWorkflow(goal);
+      
+      console.log("📦 Nodes to execute:", codeWorkflow.steps.map(s => s.id));
+      
+      const enrichedResult = enrichWorkflow(codeWorkflow);
+      
+      console.log("🎯 FINAL WORKFLOW OUTPUT:", {
+        workflowName: enrichedResult.workflowName,
+        steps: enrichedResult.steps.length,
+        agents: enrichedResult.agents.length
+      });
+      
+      return NextResponse.json(
+        {
+          success: true,
+          workflow: enrichedResult,
+          metadata: {
+            generatedAt: new Date().toISOString(),
+            model: "code-debugging-specialized",
+            workflowType: "code-debugging",
             validation: { isValid: true, errors: [], warnings: [] },
           },
         },

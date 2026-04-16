@@ -204,6 +204,17 @@ const STUDY_PLANNER_KEYWORDS = [
   "class", "course", "subject", "subjects", "semester", "term"
 ];
 
+const CODE_DEBUGGING_KEYWORDS = [
+  "bug", "error", "fix", "debug", "issue", "problem", "crash", "exception",
+  "typeerror", "syntaxerror", "referenceerror", "undefined", "null",
+  "not a function", "cannot read", "unexpected token", "parse error",
+  "undefined is not", "is not defined", "missing", "failed to",
+  "TypeError", "SyntaxError", "ReferenceError", "Error:",
+  "debug this", "debug code", "fix code", "debug my code", "find the bug",
+  "why is this", "what is wrong with", "something went wrong", "not working",
+  "doesn'?t work", "isn'?t working", "failing", "fails to"
+];
+
 const isResumeScreeningPrompt = (goal: string): boolean => {
   const lowerGoal = goal.toLowerCase();
   return RESUME_SCREENING_KEYWORDS.some(keyword => lowerGoal.includes(keyword));
@@ -217,6 +228,11 @@ const isMedicalReportPrompt = (goal: string): boolean => {
 const isStudyPlannerPrompt = (goal: string): boolean => {
   const lowerGoal = goal.toLowerCase();
   return STUDY_PLANNER_KEYWORDS.some(keyword => lowerGoal.includes(keyword));
+};
+
+const isCodeDebuggingPrompt = (goal: string): boolean => {
+  const lowerGoal = goal.toLowerCase();
+  return CODE_DEBUGGING_KEYWORDS.some(keyword => lowerGoal.includes(keyword));
 };
 
 // STRICT NO-HALLUCINATION: Only extract what's actually in the resume text
@@ -1325,6 +1341,275 @@ ${schedule}
   }
 }
 
+const executeCodeDebuggingNode = async (
+  stepType: string,
+  nodeName: string,
+  context: {
+    input: string;
+    lastOutput: string | null;
+    debugData?: any;
+  }
+): Promise<{ output: string; hasError: boolean; debugData?: any }> => {
+  const { debugData } = context;
+
+  switch (stepType) {
+    case "ErrorAnalyzer": {
+      const input = debugData?.rawInput || context.input;
+      const inputLower = input.toLowerCase();
+      
+      let errorType = "Unknown Error";
+      let errorMessage = input;
+      
+      if (/typeerror/i.test(input)) {
+        errorType = "TypeError";
+        const match = input.match(/TypeError:\s*(.+)/i);
+        if (match) errorMessage = match[1];
+      } else if (/syntaxerror/i.test(input)) {
+        errorType = "SyntaxError";
+        const match = input.match(/SyntaxError:\s*(.+)/i);
+        if (match) errorMessage = match[1];
+      } else if (/referenceerror/i.test(input)) {
+        errorType = "ReferenceError";
+        const match = input.match(/ReferenceError:\s*(.+)/i);
+        if (match) errorMessage = match[1];
+      } else if (/cannot read/i.test(input)) {
+        errorType = "TypeError (Cannot Read)";
+        errorMessage = "Attempting to access a property of undefined/null";
+      } else if (/is not defined/i.test(input) || /not defined/i.test(input)) {
+        errorType = "ReferenceError (Not Defined)";
+        errorMessage = "Variable or function not declared";
+      } else if (/undefined/i.test(input)) {
+        errorType = "Undefined Value Error";
+        errorMessage = "Variable is undefined when value expected";
+      } else if (/null/i.test(input) && /read/i.test(input)) {
+        errorType = "Null Reference Error";
+        errorMessage = "Attempting to use null value as object";
+      }
+      
+      let problem = "";
+      
+      if (/map|filter|reduce|forEach|sort/i.test(input)) {
+        problem = `Using array method (.map, .filter, etc.) on undefined/null value. Array methods require the variable to be an array.`;
+      } else if (/property/i.test(input) || /read.*property/i.test(input)) {
+        problem = `Accessing a property of undefined or null variable. The object is not initialized before use.`;
+      } else if (/not a function/i.test(input)) {
+        problem = `Calling something that is not a function. Variable may be undefined or have wrong type.`;
+      } else if (/not defined/i.test(input)) {
+        problem = `Using a variable or function that hasn't been declared or initialized.`;
+      } else if (/syntax/i.test(input)) {
+        problem = `Code has syntax error - missing brackets, semicolons, or incorrect syntax.`;
+      } else {
+        problem = `Error detected in code. The specific issue needs investigation.`;
+      }
+      
+      return {
+        output: `🔍 Problem Analysis:
+
+## Error Type:
+⚠️ ${errorType}
+
+## Problem:
+${problem}
+
+## Raw Input:
+"${input}"
+
+✅ Analysis complete. Moving to root cause analysis.`,
+        hasError: false,
+        debugData: { 
+          ...debugData, 
+          rawInput: input,
+          errorType,
+          problem,
+          errorAnalysisComplete: true
+        }
+      };
+    }
+    
+    case "RootCauseAnalyzer": {
+      const errorType = debugData?.errorType || "Unknown";
+      const problem = debugData?.problem || "";
+      
+      let cause = "";
+      
+      if (errorType.includes("Cannot Read") || errorType.includes("Null")) {
+        cause = `The variable was not initialized with a value before being used. In JavaScript/TypeScript, if you try to access properties of undefined or null, you get this error. This typically happens when:
+• Data hasn't loaded yet from API/database
+• Variable was declared but not assigned
+• Wrong variable name used
+• Conditional logic didn't execute properly`;
+      } else if (errorType.includes("Not Defined") || errorType.includes("ReferenceError")) {
+        cause = `The identifier (variable/function) doesn't exist in the current scope. Common reasons:
+• Typo in variable name
+• Variable declared after it's used (hoisting issues)
+• Forgot to import/require a module
+• Variable in different scope (inside function, not accessible outside)`;
+      } else if (errorType.includes("TypeError")) {
+        cause = `Type mismatch - trying to use a value as wrong type. JavaScript is dynamically typed, but certain operations require specific types:
+• Calling .map() on non-array
+• Accessing property on primitive type
+• Passing wrong argument type to function`;
+      } else if (errorType.includes("SyntaxError")) {
+        cause = `Code structure is invalid. The parser couldn't understand the code:
+• Missing closing bracket/parenthesis
+• Missing semicolon where required
+• Invalid character or typo in keyword
+• Unclosed string or template literal`;
+      } else {
+        cause = `The underlying cause is likely one of:
+• Variable not initialized before use
+• Wrong data type being used
+• Missing imports or dependencies
+• Race condition (async operation completed in wrong order)`;
+      }
+      
+      return {
+        output: `💡 Root Cause Analysis:
+
+## Error Type:
+${errorType}
+
+## Problem:
+${problem}
+
+## Root Cause:
+${cause}
+
+✅ Root cause identified. Ready to generate fix.`,
+        hasError: false,
+        debugData: { 
+          ...debugData, 
+          cause,
+          rootCauseComplete: true
+        }
+      };
+    }
+    
+    case "FixGenerator": {
+      const errorType = debugData?.errorType || "Unknown";
+      const problem = debugData?.problem || "";
+      const cause = debugData?.cause || "";
+      
+      let fix = "";
+      let improvedCode = "";
+      let bestPractice = "";
+      
+      if (errorType.includes("Cannot Read") || errorType.includes("Null") || errorType.includes("TypeError")) {
+        fix = `Initialize the variable with a default value or add a null/undefined check before using it.`;
+        improvedCode = `// Before (causing error):
+// items.map(item => item.name)
+
+// After (safe):
+const items = data || []; // Provide default empty array
+items.map(item => item.name);
+
+// Or use optional chaining:
+data?.items?.map(item => item.name);
+
+// Or add conditional check:
+if (data && data.items) {
+  data.items.map(item => item.name);
+}`;
+        bestPractice = "Always initialize variables with default values or use optional chaining (?.) to handle undefined/null cases safely.";
+      } else if (errorType.includes("Not Defined") || errorType.includes("ReferenceError")) {
+        fix = `Ensure the variable is declared and initialized before use. Check spelling and scope.`;
+        improvedCode = `// Before (causing error):
+// console.log(userName);
+
+// After (fixed):
+const userName = getUserName(); // Ensure it's declared
+console.log(userName);
+
+// Or check if exists before using:
+if (typeof userName !== 'undefined') {
+  console.log(userName);
+}
+
+// For imports, ensure proper import statement:
+import { userName } from './userModule';
+console.log(userName);`;
+        bestPractice = "Always declare variables before use. Use proper imports/exports for modules. Use typeof to check before accessing.";
+      } else if (errorType.includes("SyntaxError")) {
+        fix = `Review code structure - check for matching brackets, semicolons, and proper syntax.`;
+        improvedCode = `// Common syntax fixes:
+
+// Missing semicolon:
+const x = 5;  // Add semicolon
+
+// Unclosed bracket - count opening/closing:
+function example() {
+  if (condition) {
+    doSomething();
+  } // Missing closing brace
+
+// Fix by ensuring matching:
+function example() {
+  if (condition) {
+    doSomething();
+  }
+}
+
+// Use a linter (ESLint) to catch these automatically!`;
+        bestPractice = "Use ESLint or a code linter to catch syntax errors automatically. Format code regularly with Prettier.";
+      } else {
+        fix = `Review the error message and check the specific line. Add appropriate checks and validations.`;
+        improvedCode = `// General debugging approach:
+
+// 1. Check the error line
+// 2. Log values before the error
+console.log("Debug:", variableName);
+
+// 3. Add try-catch for error handling
+try {
+  // risky operation
+  const result = riskyFunction();
+} catch (error) {
+  console.error("Error occurred:", error);
+}
+
+// 4. Use debugger in browser dev tools
+debugger; // pauses execution here`;
+        bestPractice = "Use console.log strategically to debug. Learn to use browser DevTools debugger for complex issues.";
+      }
+      
+      const finalOutput = `🛠 Fix Generation:
+
+## Problem:
+${problem}
+
+## Root Cause:
+${cause.split('\n')[0]}
+
+## Solution:
+${fix}
+
+## Improved Code:
+${improvedCode}
+
+## Best Practice:
+📌 ${bestPractice}
+
+---
+✅ Fix generated successfully!`;
+
+      return {
+        output: finalOutput,
+        hasError: false,
+        debugData: { 
+          ...debugData, 
+          fix,
+          improvedCode,
+          bestPractice,
+          fixComplete: true
+        }
+      };
+    }
+    
+    default:
+      return { output: `Unknown step type: ${stepType}`, hasError: true }
+  }
+}
+
 function AgentBuilder() {
   const {
     addedNodes,
@@ -1765,7 +2050,7 @@ function AgentBuilder() {
     const loadingToastId = toast.loading("Running workflow...")
     setShowOutputPanel(true)
 
-    const context: { input: string; lastOutput: string | null; emailData?: any; resumeData?: any; jobRole?: string; imageUrl?: string; imageType?: string; medicalData?: any; studyData?: any } = {
+    const context: { input: string; lastOutput: string | null; emailData?: any; resumeData?: any; jobRole?: string; imageUrl?: string; imageType?: string; medicalData?: any; studyData?: any; debugData?: any } = {
       input: workflowConfig.goal,
       lastOutput: null,
       emailData: {},
@@ -1775,6 +2060,7 @@ function AgentBuilder() {
       imageType: undefined,
       medicalData: {},
       studyData: {},
+      debugData: {},
     }
 
     const resetNodeStatuses = () => {
@@ -1937,6 +2223,43 @@ function AgentBuilder() {
           console.log(`[CONFIDENCE] Study Planner node "${nodeName}":`, studyConfidence)
           setNodeStatus(node.id, studyResult.hasError ? "error" : "success", studyConfidence.confidence, studyConfidence.reason)
           setExecutionLogs((logs) => [...logs, { step: nodeName, output: studyResult.output, source: "llm", ...studyConfidence }])
+          
+          await new Promise((res) => setTimeout(res, 300))
+          continue
+        }
+
+        if (isCodeDebuggingPrompt(workflowConfig.goal) && stepType && ["ErrorAnalyzer", "RootCauseAnalyzer", "FixGenerator"].includes(stepType)) {
+          setExecutionLogs((logs) => [...logs, { step: nodeName, output: `⚡ ${nodeName} started...`, source: "llm" }])
+          
+          const debugResult = await executeCodeDebuggingNode(stepType, nodeName, {
+            input: context.input,
+            lastOutput: context.lastOutput,
+            debugData: { ...context.debugData, rawInput: context.input },
+          })
+          context.lastOutput = debugResult.output
+          
+          if (debugResult.debugData) {
+            context.debugData = { ...context.debugData, ...debugResult.debugData }
+          }
+          
+          let debugConfidence = normalizeConfidence({ success: !debugResult.hasError, output: debugResult.output })
+          
+          const debugConfidenceCaps: Record<string, number> = {
+            "ErrorAnalyzer": 85,
+            "RootCauseAnalyzer": 80,
+            "FixGenerator": 85,
+          };
+          
+          const debugCap = debugConfidenceCaps[stepType] || 85;
+          debugConfidence = {
+            ...debugConfidence,
+            confidence: Math.min(debugConfidence.confidence, debugCap),
+            reason: `${debugConfidence.reason} (capped at ${debugCap}%)`
+          };
+          
+          console.log(`[CONFIDENCE] Code Debugging node "${nodeName}":`, debugConfidence)
+          setNodeStatus(node.id, debugResult.hasError ? "error" : "success", debugConfidence.confidence, debugConfidence.reason)
+          setExecutionLogs((logs) => [...logs, { step: nodeName, output: debugResult.output, source: "llm", ...debugConfidence }])
           
           await new Promise((res) => setTimeout(res, 300))
           continue
