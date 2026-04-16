@@ -195,6 +195,15 @@ const MEDICAL_REPORT_KEYWORDS = [
   "analyze symptoms", "symptom analysis", "health analysis", "medical analysis"
 ];
 
+const STUDY_PLANNER_KEYWORDS = [
+  "study", "studying", "study plan", "plan my studies", "make a study plan",
+  "prepare for exam", "exam preparation", "study schedule", "study schedule",
+  "revision plan", "study schedule for", "prepare for", "upcoming exam",
+  "prepare for test", "study plan for", "study material", "syllabus",
+  "topics to study", "what to study", "study guide", "how to prepare",
+  "class", "course", "subject", "subjects", "semester", "term"
+];
+
 const isResumeScreeningPrompt = (goal: string): boolean => {
   const lowerGoal = goal.toLowerCase();
   return RESUME_SCREENING_KEYWORDS.some(keyword => lowerGoal.includes(keyword));
@@ -203,6 +212,11 @@ const isResumeScreeningPrompt = (goal: string): boolean => {
 const isMedicalReportPrompt = (goal: string): boolean => {
   const lowerGoal = goal.toLowerCase();
   return MEDICAL_REPORT_KEYWORDS.some(keyword => lowerGoal.includes(keyword));
+};
+
+const isStudyPlannerPrompt = (goal: string): boolean => {
+  const lowerGoal = goal.toLowerCase();
+  return STUDY_PLANNER_KEYWORDS.some(keyword => lowerGoal.includes(keyword));
 };
 
 // STRICT NO-HALLUCINATION: Only extract what's actually in the resume text
@@ -1065,6 +1079,252 @@ ${redFlags.map((flag, i) => `## Flag ${i + 1}: ${flag.symptom}
   }
 }
 
+const executeStudyPlannerNode = async (
+  stepType: string,
+  nodeName: string,
+  context: {
+    input: string;
+    lastOutput: string | null;
+    studyData?: any;
+  }
+): Promise<{ output: string; hasError: boolean; studyData?: any }> => {
+  const { studyData } = context;
+
+  switch (stepType) {
+    case "GoalAnalyzer": {
+      const input = studyData?.rawInput || context.input;
+      const inputLower = input.toLowerCase();
+      
+      const subjectPatterns = [
+        { pattern: /dsa|data structures|algorithms?/i, name: "DSA" },
+        { pattern: /dbms|database|database management|database systems?/i, name: "DBMS" },
+        { pattern: /operating system|os/i, name: "Operating Systems" },
+        { pattern: /computer networks?|networks?/i, name: "Computer Networks" },
+        { pattern: /software engineering|se/i, name: "Software Engineering" },
+        { pattern: /python|java|javascript|c\+\+|programming/i, name: "Programming" },
+        { pattern: /machine learning|ml|ai|artificial intelligence/i, name: "ML/AI" },
+        { pattern: /web|frontend|backend|full.?stack/i, name: "Web Development" },
+        { pattern: /math|mathematics|calculus|algebra|discrete math/i, name: "Mathematics" },
+        { pattern: /physics|mechanics|thermodynamics/i, name: "Physics" },
+      ];
+      
+      const detectedSubjects = subjectPatterns
+        .filter(s => s.pattern.test(inputLower))
+        .map(s => s.name);
+      
+      const durationMatch = input.match(/(\d+)\s*(day|days|week|weeks|month|months)/i);
+      const duration = durationMatch ? durationMatch[0] : "Duration not specified";
+      
+      const durationValue = durationMatch ? parseInt(durationMatch[1]) : 0;
+      const durationUnit = durationMatch ? durationMatch[2].toLowerCase() : "";
+      
+      let goal = "General study";
+      if (/exam|test|quiz/i.test(inputLower)) {
+        goal = "Exam preparation";
+      } else if (/revision|review|revise/i.test(inputLower)) {
+        goal = "Revision";
+      } else if (/interview/i.test(inputLower)) {
+        goal = "Interview preparation";
+      } else if (/project|assignment/i.test(inputLower)) {
+        goal = "Project/Assignment work";
+      }
+      
+      if (detectedSubjects.length === 0) {
+        detectedSubjects.push("General Subject");
+      }
+      
+      return {
+        output: `📋 Study Goal Analysis:
+
+## Subjects Identified:
+${detectedSubjects.map((s, i) => `• ${i + 1}. ${s}`).join("\n")}
+
+## Duration:
+⏱️ ${duration}
+
+## Goal:
+🎯 ${goal}
+
+## Raw Input:
+"${input}"
+
+✅ Analysis complete. Ready to generate study plan.`,
+        hasError: false,
+        studyData: { 
+          ...studyData, 
+          subjects: detectedSubjects,
+          duration,
+          durationValue,
+          durationUnit,
+          goal,
+          rawInput: input,
+          analysisComplete: true
+        }
+      };
+    }
+    
+    case "StudyPlanGenerator": {
+      const subjects = studyData?.subjects || ["General Subject"];
+      const durationValue = studyData?.durationValue || 7;
+      const durationUnit = studyData?.durationUnit || "days";
+      const goal = studyData?.goal || "General study";
+      
+      const days = durationUnit.includes("week") ? durationValue * 7 : 
+                   durationUnit.includes("month") ? durationValue * 30 : durationValue;
+      
+      const subjectDays = Math.floor(days / subjects.length);
+      const bufferDays = Math.max(1, Math.floor(days * 0.1));
+      const revisionDays = Math.max(1, Math.floor(days * 0.15));
+      const availableDays = days - bufferDays - revisionDays;
+      const studyDaysPerSubject = Math.floor(availableDays / subjects.length);
+      
+      let schedule = "";
+      let currentDay = 1;
+      
+      subjects.forEach((subject: string, idx: number) => {
+        const startDay = currentDay;
+        const endDay = currentDay + studyDaysPerSubject - 1;
+        currentDay = endDay + 1;
+        
+        schedule += `Day ${startDay} → ${subject} - Basics\n`;
+        if (studyDaysPerSubject >= 2) {
+          schedule += `Day ${startDay + 1} → ${subject} - Advanced Topics\n`;
+        }
+      });
+      
+      const revisionStart = currentDay;
+      const revisionEnd = currentDay + revisionDays - 1;
+      currentDay = revisionEnd + 1;
+      
+      schedule += `\nDay ${revisionStart}-${revisionEnd} → Revision Days\n`;
+      
+      if (bufferDays > 0) {
+        schedule += `Day ${currentDay} → Buffer/Practice\n`;
+      }
+      
+      return {
+        output: `📅 Study Plan Generated:
+
+## Overview:
+• Total Days: ${days}
+• Subjects: ${subjects.length}
+• Goal: ${goal}
+
+## Day-wise Schedule:
+${schedule}
+
+⏱️ This schedule allocates ${studyDaysPerSubject} study days per subject with ${revisionDays} revision days.`,
+        hasError: false,
+        studyData: { 
+          ...studyData, 
+          schedule,
+          totalDays: days,
+          studyDaysPerSubject,
+          revisionDays,
+          bufferDays,
+          planGenerationComplete: true
+        }
+      };
+    }
+    
+    case "PlanOptimizer": {
+      const subjects = studyData?.subjects || ["General Subject"];
+      const schedule = studyData?.schedule || "";
+      const totalDays = studyData?.totalDays || 7;
+      const revisionDays = studyData?.revisionDays || 1;
+      const bufferDays = studyData?.bufferDays || 1;
+      
+      const mockTestDay = totalDays - bufferDays;
+      
+      const optimizedPlan = `📋 Optimized Study Plan
+
+## Final Schedule:
+${schedule}
+
+## Added Features:
+✅ ${revisionDays} Revision day(s) included
+✅ ${bufferDays} Buffer day(s) for flexibility
+✅ Day ${mockTestDay}: Mock Test Day
+
+## Tips:
+• Start each day with a quick review of the previous topic
+• Take short breaks every 45-50 minutes
+• Stay hydrated and maintain a healthy routine
+• Don't overwork - rest is important for retention
+
+📚 Good luck with your ${studyData?.goal || "studies"}!`;
+
+      return {
+        output: optimizedPlan,
+        hasError: false,
+        studyData: { 
+          ...studyData, 
+          optimizedPlan,
+          mockTestDay,
+          optimizationComplete: true
+        }
+      };
+    }
+    
+    case "ConceptRecommender": {
+      const subjects = studyData?.subjects || ["General Subject"];
+      const goal = studyData?.goal || "study";
+      const isExamPrep = /exam|test/i.test(goal);
+      
+      const commonConcepts: Record<string, string[]> = {
+        "DSA": ["Arrays and Strings", "Linked Lists", "Stacks and Queues", "Trees and Graphs", "Sorting Algorithms", "Search Algorithms", "Dynamic Programming", "Hash Tables", "Recursion", "Time and Space Complexity"],
+        "DBMS": ["SQL Queries", "Joins (Inner, Outer)", "Normalization (1NF, 2NF, 3NF)", "ER Diagrams", "Transactions and ACID", "Indexing", "Concurrency Control", "Database Design", "Keys (Primary, Foreign)", "NoSQL Basics"],
+        "Operating Systems": ["Process Management", "Threading", "Scheduling Algorithms", "Memory Management", "Deadlock", "Synchronization", "File Systems", "Virtual Memory", "CPU Scheduling", "Paging and Segmentation"],
+        "Computer Networks": ["OSI/TCP-IP Models", "IP Addressing", "Routing Algorithms", "TCP vs UDP", "HTTP/HTTPS", "DNS", "Network Security", "Socket Programming", "Switching Techniques", "Congestion Control"],
+        "Programming": ["Syntax and Data Types", "Control Structures", "Functions and Methods", "OOP Concepts", "Exception Handling", "File I/O", "Collections and Generics", "Design Patterns", "Testing Basics", "Debugging"],
+        "ML/AI": ["Supervised Learning", "Unsupervised Learning", "Neural Networks", "Regression", "Classification", "Clustering", "Feature Engineering", "Model Evaluation", "Gradient Descent", "Overfitting/Underfitting"],
+        "Web Development": ["HTML/CSS Basics", "JavaScript Fundamentals", "React/Vue/Angular", "REST APIs", "Authentication", "Database Integration", "Responsive Design", "State Management", "Testing", "Deployment"],
+        "Mathematics": ["Calculus", "Linear Algebra", "Probability and Statistics", "Discrete Mathematics", "Set Theory", "Graph Theory", "Matrices", "Differentiation/Integration", "Combinatorics", "Logic"],
+        "Physics": ["Mechanics", "Thermodynamics", "Electromagnetism", "Optics", "Modern Physics", "Wave Theory", "Fluid Mechanics", "Quantum Basics", "Relativity", "Nuclear Physics"],
+      };
+      
+      let conceptsOutput = "📚 Key Concepts:\n\n";
+      
+      subjects.forEach((subject: string) => {
+        const subjectConcepts = commonConcepts[subject] || commonConcepts["Programming"];
+        const limitedConcepts = subjectConcepts.slice(0, 5);
+        
+        conceptsOutput += `## ${subject}:\n`;
+        limitedConcepts.forEach((concept: string, idx: number) => {
+          conceptsOutput += `${idx + 1}. ${concept}\n`;
+        });
+        conceptsOutput += "\n";
+      });
+      
+      const finalOutput = `${conceptsOutput}
+---
+💡 Focus on these high-impact topics for ${isExamPrep ? "exam preparation" : "learning"}.
+
+🎯 Recommended approach:
+• Start with fundamentals
+• Practice with real examples
+• Solve related problems
+• Review and revise regularly`;
+
+      return {
+        output: finalOutput,
+        hasError: false,
+        studyData: { 
+          ...studyData, 
+          concepts: subjects.map((s: string) => ({
+            subject: s,
+            topics: commonConcepts[s]?.slice(0, 5) || commonConcepts["Programming"].slice(0, 5)
+          })),
+          conceptsComplete: true
+        }
+      };
+    }
+    
+    default:
+      return { output: `Unknown step type: ${stepType}`, hasError: true }
+  }
+}
+
 function AgentBuilder() {
   const {
     addedNodes,
@@ -1505,7 +1765,7 @@ function AgentBuilder() {
     const loadingToastId = toast.loading("Running workflow...")
     setShowOutputPanel(true)
 
-    const context: { input: string; lastOutput: string | null; emailData?: any; resumeData?: any; jobRole?: string; imageUrl?: string; imageType?: string; medicalData?: any } = {
+    const context: { input: string; lastOutput: string | null; emailData?: any; resumeData?: any; jobRole?: string; imageUrl?: string; imageType?: string; medicalData?: any; studyData?: any } = {
       input: workflowConfig.goal,
       lastOutput: null,
       emailData: {},
@@ -1514,6 +1774,7 @@ function AgentBuilder() {
       imageUrl: undefined,
       imageType: undefined,
       medicalData: {},
+      studyData: {},
     }
 
     const resetNodeStatuses = () => {
@@ -1638,6 +1899,44 @@ function AgentBuilder() {
           console.log(`[CONFIDENCE] Medical node "${nodeName}":`, medicalConfidence)
           setNodeStatus(node.id, medicalResult.hasError ? "error" : "success", medicalConfidence.confidence, medicalConfidence.reason)
           setExecutionLogs((logs) => [...logs, { step: nodeName, output: medicalResult.output, source: "llm", ...medicalConfidence }])
+          
+          await new Promise((res) => setTimeout(res, 300))
+          continue
+        }
+
+        if (isStudyPlannerPrompt(workflowConfig.goal) && stepType && ["GoalAnalyzer", "StudyPlanGenerator", "PlanOptimizer", "ConceptRecommender"].includes(stepType)) {
+          setExecutionLogs((logs) => [...logs, { step: nodeName, output: `⚡ ${nodeName} started...`, source: "llm" }])
+          
+          const studyResult = await executeStudyPlannerNode(stepType, nodeName, {
+            input: context.input,
+            lastOutput: context.lastOutput,
+            studyData: { ...context.studyData, rawInput: context.input },
+          })
+          context.lastOutput = studyResult.output
+          
+          if (studyResult.studyData) {
+            context.studyData = { ...context.studyData, ...studyResult.studyData }
+          }
+          
+          let studyConfidence = normalizeConfidence({ success: !studyResult.hasError, output: studyResult.output })
+          
+          const studyConfidenceCaps: Record<string, number> = {
+            "GoalAnalyzer": 85,
+            "StudyPlanGenerator": 80,
+            "PlanOptimizer": 82,
+            "ConceptRecommender": 83,
+          };
+          
+          const studyCap = studyConfidenceCaps[stepType] || 80;
+          studyConfidence = {
+            ...studyConfidence,
+            confidence: Math.min(studyConfidence.confidence, studyCap),
+            reason: `${studyConfidence.reason} (capped at ${studyCap}%)`
+          };
+          
+          console.log(`[CONFIDENCE] Study Planner node "${nodeName}":`, studyConfidence)
+          setNodeStatus(node.id, studyResult.hasError ? "error" : "success", studyConfidence.confidence, studyConfidence.reason)
+          setExecutionLogs((logs) => [...logs, { step: nodeName, output: studyResult.output, source: "llm", ...studyConfidence }])
           
           await new Promise((res) => setTimeout(res, 300))
           continue

@@ -24,7 +24,11 @@ export type StepType =
   | "SymptomExtractor"
   | "PatternAnalyzer"
   | "RiskFlagger"
-  | "RecommendationProvider";
+  | "RecommendationProvider"
+  | "GoalAnalyzer"
+  | "StudyPlanGenerator"
+  | "PlanOptimizer"
+  | "ConceptRecommender";
 
 export type AgentType = 
   | "Planner" 
@@ -62,7 +66,11 @@ export type AgentType =
   | "Symptom Extractor"
   | "Pattern Analyzer"
   | "Risk Flag Agent"
-  | "Recommendation Agent";
+  | "Recommendation Agent"
+  | "Goal Analyzer"
+  | "Study Plan Generator"
+  | "Plan Optimizer"
+  | "Concept Recommender";
 
 export type ToolType = "api" | "function" | "condition" | "formatter";
 
@@ -472,5 +480,85 @@ OUTPUT:
 - Suggested urgency
 
 CRITICAL: Always emphasize professional medical consultation.`
+  },
+  "Goal Analyzer": {
+    role: "Extracts structured study information from user input",
+    capabilities: ["subject extraction", "duration parsing", "goal identification", "data structuring"],
+    systemPrompt: `You extract structured study information from user input.
+
+From user input:
+- Identify subjects
+- Identify duration (days/weeks)
+- Identify goal (exam, revision, etc.)
+
+RULES:
+- Do NOT generate plan
+- Do NOT add concepts
+- Only extract structured data
+
+OUTPUT FORMAT:
+Subjects:
+Duration:
+Goal:`
+  },
+  "Study Plan Generator": {
+    role: "Generates day-by-day study schedules",
+    capabilities: ["schedule creation", "time allocation", "subject balancing", "realistic planning"],
+    systemPrompt: `You generate a study plan.
+
+Using:
+- subjects
+- duration
+
+RULES:
+- Divide time evenly across subjects
+- Create day-wise schedule
+- Keep it realistic and simple
+- Do NOT add concepts
+
+OUTPUT:
+Day-by-day schedule`
+  },
+  "Plan Optimizer": {
+    role: "Improves and optimizes study plans",
+    capabilities: ["revision planning", "buffer time allocation", "mock test scheduling", "workload balancing"],
+    systemPrompt: `You improve study plans.
+
+RULES:
+- Add revision days
+- Add buffer time
+- Add mock tests
+- Ensure plan is not overloaded
+- Maintain clarity
+
+OUTPUT:
+Final optimized study plan`
+  },
+  "Concept Recommender": {
+    role: "Recommends important concepts and topics for study",
+    capabilities: ["topic identification", "concept prioritization", "exam focus areas", "key concept extraction"],
+    systemPrompt: `You recommend important concepts/topics for study.
+
+INPUT:
+- Subjects list
+- Goal (exam preparation)
+
+RULES:
+- Suggest key topics for each subject
+- Keep it concise
+- Focus on high-impact concepts commonly asked in exams
+- Do NOT generate study plan
+
+OUTPUT FORMAT:
+
+Key Concepts:
+
+Subject 1:
+* Topic 1
+* Topic 2
+
+Subject 2:
+* Topic 1
+* Topic 2`
   }
 };

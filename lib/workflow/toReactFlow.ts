@@ -55,6 +55,10 @@ const mapStepTypeToNodeType = (stepType: string): string => {
     PatternAnalyzer: "AgentNode",
     RiskFlagger: "AgentNode",
     RecommendationProvider: "AgentNode",
+    GoalAnalyzer: "AgentNode",
+    StudyPlanGenerator: "AgentNode",
+    PlanOptimizer: "AgentNode",
+    ConceptRecommender: "AgentNode",
   };
 
   return typeMap[stepType] || "AgentNode";
@@ -304,6 +308,10 @@ const getNodeColor = (stepType: string): string => {
     PatternAnalyzer: "#FFE4CC",
     RiskFlagger: "#FFECEC",
     RecommendationProvider: "#E8F5E9",
+    GoalAnalyzer: "#E3FCFD",
+    StudyPlanGenerator: "#E8F5E9",
+    PlanOptimizer: "#F0FFF4",
+    ConceptRecommender: "#F3E5F5",
   };
 
   return colorMap[stepType] || "#DCF7E3";

@@ -56,6 +56,15 @@ const MEDICAL_REPORT_KEYWORDS = [
   "analyze symptoms", "symptom analysis", "health analysis", "medical analysis"
 ];
 
+const STUDY_PLANNER_KEYWORDS = [
+  "study", "studying", "study plan", "plan my studies", "make a study plan",
+  "prepare for exam", "exam preparation", "study schedule", "study schedule",
+  "revision plan", "study schedule for", "prepare for", "upcoming exam",
+  "prepare for test", "study plan for", "study material", "syllabus",
+  "topics to study", "what to study", "study guide", "how to prepare",
+  "class", "course", "subject", "subjects", "semester", "term"
+];
+
 const isEmailMarketingPrompt = (goal: string): boolean => {
   const lowerGoal = goal.toLowerCase();
   return EMAIL_MARKETING_KEYWORDS.some(keyword => lowerGoal.includes(keyword));
@@ -94,6 +103,11 @@ const isImageGenerationPrompt = (goal: string): boolean => {
 const isMedicalReportPrompt = (goal: string): boolean => {
   const lowerGoal = goal.toLowerCase();
   return MEDICAL_REPORT_KEYWORDS.some(keyword => lowerGoal.includes(keyword));
+};
+
+const isStudyPlannerPrompt = (goal: string): boolean => {
+  const lowerGoal = goal.toLowerCase();
+  return STUDY_PLANNER_KEYWORDS.some(keyword => lowerGoal.includes(keyword));
 };
 
 const generateEmailMarketingWorkflow = (goal: string): WorkflowResult => {
@@ -2186,6 +2200,261 @@ Output as JSON: { "type": "image", "imageUrl": "url", "prompt": "prompt" }`,
   return workflowResult;
 };
 
+const generateStudyPlannerWorkflow = (goal: string): WorkflowResult => {
+  return {
+    workflowName: "Study Planner Agent",
+    description: "AI-powered study planner that creates structured study plans with key concepts",
+    goal: goal,
+    steps: [
+      {
+        id: "step-analyze-goal",
+        name: "Analyze Goal",
+        type: "GoalAnalyzer",
+        description: "Extract subjects, duration, and goal from user input",
+        agent: {
+          id: "goal-analyzer",
+          name: "Goal Analyzer",
+          instruction: `You extract structured study information from user input.
+
+From user input:
+- Identify subjects
+- Identify duration (days/weeks)
+- Identify goal (exam, revision, etc.)
+
+RULES:
+- Do NOT generate plan
+- Do NOT add concepts
+- Only extract structured data
+
+OUTPUT FORMAT:
+Subjects:
+Duration:
+Goal:`,
+          tools: [],
+          model: DEFAULT_AGENT_MODEL,
+          outputFormat: "text"
+        },
+        dependencies: [],
+        next: { success: "step-generate-plan", failure: null },
+        config: {}
+      },
+      {
+        id: "step-generate-plan",
+        name: "Generate Study Plan",
+        type: "StudyPlanGenerator",
+        description: "Create day-by-day study schedule",
+        agent: {
+          id: "study-plan-generator",
+          name: "Study Plan Generator",
+          instruction: `You generate a study plan.
+
+Using:
+- subjects
+- duration
+
+RULES:
+- Divide time evenly across subjects
+- Create day-wise schedule
+- Keep it realistic and simple
+- Do NOT add concepts
+
+OUTPUT:
+Day-by-day schedule`,
+          tools: [],
+          model: DEFAULT_AGENT_MODEL,
+          outputFormat: "text"
+        },
+        dependencies: ["step-analyze-goal"],
+        next: { success: "step-optimize-plan", failure: null },
+        config: {}
+      },
+      {
+        id: "step-optimize-plan",
+        name: "Optimize Plan",
+        type: "PlanOptimizer",
+        description: "Add revision days, buffer time, and mock tests",
+        agent: {
+          id: "plan-optimizer",
+          name: "Plan Optimizer",
+          instruction: `You improve study plans.
+
+RULES:
+- Add revision days
+- Add buffer time
+- Add mock tests
+- Ensure plan is not overloaded
+- Maintain clarity
+
+OUTPUT:
+Final optimized study plan`,
+          tools: [],
+          model: DEFAULT_AGENT_MODEL,
+          outputFormat: "text"
+        },
+        dependencies: ["step-generate-plan"],
+        next: { success: "step-recommend-concepts", failure: null },
+        config: {}
+      },
+      {
+        id: "step-recommend-concepts",
+        name: "Recommend Concepts",
+        type: "ConceptRecommender",
+        description: "Suggest key topics and concepts for each subject",
+        agent: {
+          id: "concept-recommender",
+          name: "Concept Recommender",
+          instruction: `You recommend important concepts/topics for study.
+
+INPUT:
+- Subjects list
+- Goal (exam preparation)
+
+RULES:
+- Suggest key topics for each subject
+- Keep it concise
+- Focus on high-impact concepts commonly asked in exams
+- Do NOT generate study plan
+
+OUTPUT FORMAT:
+
+Key Concepts:
+
+Subject 1:
+* Topic 1
+* Topic 2
+
+Subject 2:
+* Topic 1
+* Topic 2`,
+          tools: [],
+          model: DEFAULT_AGENT_MODEL,
+          outputFormat: "text"
+        },
+        dependencies: ["step-optimize-plan"],
+        next: { success: "step-end", failure: null },
+        config: {}
+      },
+      {
+        id: "step-end",
+        name: "End",
+        type: "End",
+        description: "Study plan completed",
+        dependencies: ["step-recommend-concepts"],
+        next: { success: null, failure: null },
+        config: {}
+      }
+    ],
+    agents: [
+      {
+        id: "goal-analyzer",
+        name: "Goal Analyzer",
+        role: "Extracts structured study information from user input",
+        capabilities: ["subject extraction", "duration parsing", "goal identification", "data structuring"],
+        tools: [],
+        model: DEFAULT_AGENT_MODEL,
+        systemPrompt: `You extract structured study information from user input.
+
+From user input:
+- Identify subjects
+- Identify duration (days/weeks)
+- Identify goal (exam, revision, etc.)
+
+RULES:
+- Do NOT generate plan
+- Do NOT add concepts
+- Only extract structured data
+
+OUTPUT FORMAT:
+Subjects:
+Duration:
+Goal:`
+      },
+      {
+        id: "study-plan-generator",
+        name: "Study Plan Generator",
+        role: "Generates day-by-day study schedules",
+        capabilities: ["schedule creation", "time allocation", "subject balancing", "realistic planning"],
+        tools: [],
+        model: DEFAULT_AGENT_MODEL,
+        systemPrompt: `You generate a study plan.
+
+Using:
+- subjects
+- duration
+
+RULES:
+- Divide time evenly across subjects
+- Create day-wise schedule
+- Keep it realistic and simple
+- Do NOT add concepts
+
+OUTPUT:
+Day-by-day schedule`
+      },
+      {
+        id: "plan-optimizer",
+        name: "Plan Optimizer",
+        role: "Improves and optimizes study plans",
+        capabilities: ["revision planning", "buffer time allocation", "mock test scheduling", "workload balancing"],
+        tools: [],
+        model: DEFAULT_AGENT_MODEL,
+        systemPrompt: `You improve study plans.
+
+RULES:
+- Add revision days
+- Add buffer time
+- Add mock tests
+- Ensure plan is not overloaded
+- Maintain clarity
+
+OUTPUT:
+Final optimized study plan`
+      },
+      {
+        id: "concept-recommender",
+        name: "Concept Recommender",
+        role: "Recommends important concepts and topics for study",
+        capabilities: ["topic identification", "concept prioritization", "exam focus areas", "key concept extraction"],
+        tools: [],
+        model: DEFAULT_AGENT_MODEL,
+        systemPrompt: `You recommend important concepts/topics for study.
+
+INPUT:
+- Subjects list
+- Goal (exam preparation)
+
+RULES:
+- Suggest key topics for each subject
+- Keep it concise
+- Focus on high-impact concepts commonly asked in exams
+- Do NOT generate study plan
+
+OUTPUT FORMAT:
+
+Key Concepts:
+
+Subject 1:
+* Topic 1
+* Topic 2
+
+Subject 2:
+* Topic 1
+* Topic 2`
+      }
+    ],
+    tools: [],
+    dependencies: {
+      "step-analyze-goal": [],
+      "step-generate-plan": ["step-analyze-goal"],
+      "step-optimize-plan": ["step-generate-plan"],
+      "step-recommend-concepts": ["step-optimize-plan"],
+      "step-end": ["step-recommend-concepts"]
+    },
+    estimatedComplexity: "low",
+    estimatedSteps: 5
+  };
+};
+
 const generateMedicalReportWorkflow = (goal: string): WorkflowResult => {
   return {
     workflowName: "Medical Report Analysis Agent",
@@ -2629,6 +2898,38 @@ export async function POST(req: NextRequest) {
             generatedAt: new Date().toISOString(),
             model: "image-generation-specialized",
             workflowType: "image-generation",
+            validation: { isValid: true, errors: [], warnings: [] },
+          },
+        },
+        { status: 200 }
+      );
+    }
+
+    if (isStudyPlannerPrompt(goal)) {
+      console.log("\n📚 WORKFLOW STARTED - Study Planner");
+      console.log("🧾 Full Input Data:", { goal, options });
+      console.log("📋 Study planning keywords detected");
+      
+      const studyWorkflow = generateStudyPlannerWorkflow(goal);
+      
+      console.log("📦 Nodes to execute:", studyWorkflow.steps.map(s => s.id));
+      
+      const enrichedResult = enrichWorkflow(studyWorkflow);
+      
+      console.log("🎯 FINAL WORKFLOW OUTPUT:", {
+        workflowName: enrichedResult.workflowName,
+        steps: enrichedResult.steps.length,
+        agents: enrichedResult.agents.length
+      });
+      
+      return NextResponse.json(
+        {
+          success: true,
+          workflow: enrichedResult,
+          metadata: {
+            generatedAt: new Date().toISOString(),
+            model: "study-planner-specialized",
+            workflowType: "study-planner",
             validation: { isValid: true, errors: [], warnings: [] },
           },
         },
