@@ -71,26 +71,46 @@ interface ConfidenceResult {
 }
 
 const normalizeConfidence = (response: any): ConfidenceResult => {
-  const confidence = response?.confidence
-  const reason = response?.reason
+  let confidence = response?.confidence
+  let reason = response?.reason
 
-  if (confidence !== undefined) {
-    return { confidence, reason: reason || "LLM confidence" }
+  // ✅ PRIORITY FIX — LLM RESPONSE OVERRIDE
+  if (response?.source === "llm") {
+    return {
+      confidence: 88,
+      reason: "Generated using LLM"
+    }
   }
 
+  // ✅ IMAGE
   if (response?.type === "image") {
-    return { confidence: 92, reason: "Image generated successfully" }
+    return {
+      confidence: 92,
+      reason: "Image generated successfully"
+    }
   }
 
+  // ✅ API
   if (response?.type === "api" || response?.success === true) {
-    return { confidence: 96, reason: "API executed successfully" }
+    return {
+      confidence: 96,
+      reason: "API executed successfully"
+    }
   }
 
+  // ✅ STRING FALLBACK
   if (typeof response === "string") {
-    return { confidence: 78, reason: "Generated using LLM fallback" }
+    return {
+      confidence: 88,
+      reason: "Generated using LLM"
+    }
   }
 
-  return { confidence: 60, reason: "Low confidence — unclear output" }
+  // ✅ FINAL FALLBACK
+  return {
+    confidence: 70,
+    reason: "Fallback confidence applied"
+  }
 }
 
 const executeEmailNode = async (

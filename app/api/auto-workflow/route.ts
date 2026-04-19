@@ -76,14 +76,21 @@ const CODE_DEBUGGING_KEYWORDS = [
   "doesn'?t work", "isn'?t working", "failing", "fails to"
 ];
 
+const WEATHER_KEYWORDS = [
+  "weather", "temperature", "forecast", "rain", "rainy",
+  "sunny", "humidity", "wind", "climate", "hot", "cold",
+  "will it rain", "weather in", "weather of", "weather for"
+];
+
+const isWeatherPrompt = (goal: string): boolean => {
+  const lowerGoal = goal.toLowerCase();
+  return WEATHER_KEYWORDS.some(keyword => lowerGoal.includes(keyword));
+};
+
 const TRAVEL_PLANNER_KEYWORDS = [
-  "trip", "travel", "vacation", "holiday", "tour", "visit",
-  "plan a trip", "plan my trip", "travel plan", "plan travel",
-  "itinerary", "explore", "goa", "mysore", "ooty", "kerala",
-  "bangalore", "mumbai", "delhi", "chennai", "kolkata",
-  "rajasthan", "himachal", "ladakh", "srinagar", "shimla",
-  "budget trip", "weekend trip", "honeymoon", "backpacking",
-  "places to visit", "tourist spots", "beaches", "mountains"
+  "trip", "travel", "vacation", "tour", "itinerary",
+  "honeymoon", "budget trip", "places to visit", "plan my trip",
+  "travel plan"
 ];
 
 const isEmailMarketingPrompt = (goal: string): boolean => {
@@ -2702,6 +2709,174 @@ Best Practice: <short tip>`
   };
 };
 
+const generateWeatherWorkflow = (goal: string): WorkflowResult => {
+  console.log("🌦 Using multi-agent Weather workflow template");
+  
+  return {
+    workflowName: "Weather Agent",
+    description: "Multi-agent weather information system",
+    goal: goal,
+    steps: [
+      {
+        id: "step-plan",
+        name: "Plan Weather Retrieval",
+        type: "Planner",
+        description: "Understand weather request and determine required city/location",
+        agent: {
+          id: "weather-planner",
+          name: "Planner",
+          instruction: `You are a weather planning assistant. Analyze the user request to determine:
+- City/location to fetch weather for
+- What weather parameters are needed (temperature, conditions, humidity, wind, etc.)
+- Any specific time preference (today, tomorrow, forecast)
+
+OUTPUT:
+Location: <city>
+Parameters: <list of needed weather info>
+Time: <today/tomorrow/forecast>`,
+          tools: [],
+          model: DEFAULT_AGENT_MODEL,
+          outputFormat: "text"
+        },
+        dependencies: [],
+        next: { success: "step-gather", failure: null },
+        config: { confidence: 88 }
+      },
+      {
+        id: "step-gather",
+        name: "Gather Weather Information",
+        type: "Analyzer",
+        description: "Extract city name and weather parameters requested",
+        agent: {
+          id: "weather-gatherer",
+          name: "Audience Analyzer",
+          instruction: `You are a weather information extractor. Extract the city name and specified weather parameters from the user's request.
+
+INPUT: The user's weather query
+OUTPUT:
+City: <extracted city name>
+Parameters: <temperature, conditions, humidity, wind speed, UV index>`,
+          tools: [],
+          model: DEFAULT_AGENT_MODEL,
+          outputFormat: "text"
+        },
+        dependencies: ["step-plan"],
+        next: { success: "step-retrieve", failure: null },
+        config: { confidence: 88 }
+      },
+      {
+        id: "step-retrieve",
+        name: "Retrieve Weather Data",
+        type: "Researcher",
+        description: "Call Weather API using extracted city",
+        agent: {
+          id: "weather-api",
+          name: "Researcher",
+          instruction: `You are a weather data retrieval agent. Call the Weather API to get current weather for the specified location.
+
+Use the weather API tool to fetch:
+- Current temperature
+- Weather conditions
+- Humidity
+- Wind speed
+- UV Index
+
+Return the raw API response.`,
+          tools: [],
+          model: DEFAULT_AGENT_MODEL,
+          outputFormat: "text"
+        },
+        dependencies: ["step-gather"],
+        next: { success: "step-validate", failure: null },
+        config: { confidence: 96 }
+      },
+      {
+        id: "step-validate",
+        name: "Validate Weather Data",
+        type: "Reviewer",
+        description: "Format final readable weather response",
+        agent: {
+          id: "weather-validator",
+          name: "Reviewer",
+          instruction: `You are a weather data formatter. Take the raw weather API response and format it into a clean, readable summary.
+
+Include:
+- Temperature (in appropriate units)
+- Weather conditions
+- Humidity percentage
+- Wind speed
+- UV Index if available
+
+Make it user-friendly and concise.`,
+          tools: [],
+          model: DEFAULT_AGENT_MODEL,
+          outputFormat: "text"
+        },
+        dependencies: ["step-retrieve"],
+        next: { success: "step-end", failure: null },
+        config: { confidence: 88 }
+      },
+      {
+        id: "step-end",
+        name: "Complete",
+        type: "End",
+        description: "Workflow completed",
+        dependencies: ["step-validate"],
+        next: { success: null, failure: null },
+        config: {}
+      }
+    ],
+    tools: [],
+    dependencies: {
+      "step-plan": [],
+      "step-gather": ["step-plan"],
+      "step-retrieve": ["step-gather"],
+      "step-validate": ["step-retrieve"],
+      "step-end": ["step-validate"]
+    },
+    estimatedComplexity: "medium",
+    estimatedSteps: 5,
+    agents: [
+      {
+        id: "weather-planner",
+        name: "Planner",
+        role: "Plans weather retrieval strategy",
+        capabilities: ["location analysis", "parameter planning", "request understanding"],
+        tools: [],
+        model: DEFAULT_AGENT_MODEL,
+        systemPrompt: "You are a weather planning assistant."
+      },
+      {
+        id: "weather-gatherer",
+        name: "Audience Analyzer",
+        role: "Extracts weather data requirements",
+        capabilities: ["city extraction", "parameter identification", "data structuring"],
+        tools: [],
+        model: DEFAULT_AGENT_MODEL,
+        systemPrompt: "You are a weather information extractor."
+      },
+      {
+        id: "weather-api",
+        name: "Researcher",
+        role: "Retrieves weather data from API",
+        capabilities: ["API calls", "data retrieval", "weather data"],
+        tools: [],
+        model: DEFAULT_AGENT_MODEL,
+        systemPrompt: "You are a weather data retrieval agent."
+      },
+      {
+        id: "weather-validator",
+        name: "Reviewer",
+        role: "Formats weather response",
+        capabilities: ["data validation", "formatting", "response generation"],
+        tools: [],
+        model: DEFAULT_AGENT_MODEL,
+        systemPrompt: "You are a weather data formatter."
+      }
+    ]
+  };
+};
+
 const generateTravelPlannerWorkflow = (goal: string): WorkflowResult => {
   return {
     workflowName: "Smart Travel Planner Agent",
@@ -3505,10 +3680,42 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    if (isWeatherPrompt(goal)) {
+      console.log("\n🌦️ WORKFLOW STARTED - Weather Agent");
+      console.log("🧾 Full Input Data:", { goal, options });
+      console.log("🌦️ Weather keywords detected");
+      
+      const weatherWorkflow = generateWeatherWorkflow(goal);
+      
+      console.log("📦 Nodes to execute:", weatherWorkflow.steps.map(s => s.id));
+      
+      const enrichedResult = enrichWorkflow(weatherWorkflow);
+      
+      console.log("🎯 FINAL WORKFLOW OUTPUT:", {
+        workflowName: enrichedResult.workflowName,
+        steps: enrichedResult.steps.length,
+        agents: enrichedResult.agents.length
+      });
+      
+      return NextResponse.json(
+        {
+          success: true,
+          workflow: enrichedResult,
+          metadata: {
+            generatedAt: new Date().toISOString(),
+            model: "weather-specialized",
+            workflowType: "weather",
+            validation: { isValid: true, errors: [], warnings: [] },
+          },
+        },
+        { status: 200 }
+      );
+    }
+
     if (isTravelPlannerPrompt(goal)) {
       console.log("\n🌍 WORKFLOW STARTED - Smart Travel Planner");
       console.log("🧾 Full Input Data:", { goal, options });
-      console.log("📋 Travel planning keywords detected");
+      console.log("🌍 Travel planning keywords detected");
       
       const travelWorkflow = generateTravelPlannerWorkflow(goal);
       

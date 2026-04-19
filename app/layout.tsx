@@ -6,6 +6,8 @@ import { ClerkProvider } from '@clerk/nextjs'
 import Provider from "./provider";
 import { Toaster } from "@/components/ui/sonner";
 
+export const dynamic = "force-dynamic";
+
 export const metadata: Metadata = {
   title: "AI Agent Builder Platform",
   description: "The app where you can build AI Agent by simply drag and drop.",
