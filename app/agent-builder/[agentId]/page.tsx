@@ -2809,6 +2809,11 @@ IMPORTANT: Use the customer data provided above. Do NOT generate fake names, ord
           
           if (apiConfig?.url) {
             try {
+              if (apiConfig.includeApiKey && !apiConfig.apiKey) {
+                if (apiConfig.url?.includes("newsapi") && workflowConfig.apiKeys.news) {
+                  apiConfig.apiKey = workflowConfig.apiKeys.news
+                }
+              }
               const cleanInput = context.input
               let url = apiConfig.url
               let extractedTopic = ""

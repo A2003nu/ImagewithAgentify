@@ -347,7 +347,23 @@ export function WorkflowInputModal({
                   <VoiceButton
                     isListening={isListening}
                     isProcessing={voiceStatus === "processing"}
-                    onClick={() => isListening ? stopListening() : startListening()}
+                    onClick={() => {
+                    if (isListening) {
+                      stopListening();
+                      fetch("/api/track", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ type: "voice_mode", data: { mode: "text" } })
+                      }).catch(() => {});
+                    } else {
+                      startListening();
+                      fetch("/api/track", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ type: "voice_mode", data: { mode: "voice" } })
+                      }).catch(() => {});
+                    }
+                  }}
                     disabled={voiceStatus === "processing"}
                   />
                 </div>

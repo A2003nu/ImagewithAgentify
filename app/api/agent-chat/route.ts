@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { groq } from "@/config/GroqModel";
+import { trackApiCall, trackConfidence } from "@/lib/prometheus";
 
 const parseConfidence = (raw: string): { output: string; confidence: number; reason: string } => {
   const defaultResult = {
@@ -701,9 +702,24 @@ Rules:
     // 🔥 FIX: HANDLE DIFFERENT API KEY FORMATS
     if (tool.includeApiKey && tool.apiKey) {
       if (tool.url.includes("weatherapi.com")) {
-        url += `&key=${tool.apiKey}`; // ✅ Weather API fix
+        url += `&key=${tool.apiKey}`;
+        trackApiCall("weather_api");
+      } else if (tool.url.includes("newsapi.org") || tool.url.includes("news")) {
+        url += `&apiKey=${tool.apiKey}`;
+        trackApiCall("news_api");
+      } else if (tool.url.includes("tavily")) {
+        trackApiCall("tavily");
+      } else if (tool.url.includes("pollinations")) {
+        trackApiCall("pollinations");
       } else {
-        url += `&apiKey=${tool.apiKey}`; // ✅ News API etc.
+        url += `&apiKey=${tool.apiKey}`;
+        trackApiCall("external_api");
+      }
+    } else {
+      if (tool.url.includes("tavily")) {
+        trackApiCall("tavily");
+      } else if (tool.url.includes("pollinations")) {
+        trackApiCall("pollinations");
       }
     }
 

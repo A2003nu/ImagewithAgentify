@@ -6,6 +6,7 @@ import {
   DEFAULT_AGENT_MODEL,
   AGENT_DEFINITIONS,
 } from "@/types/WorkflowType";
+import { trackWorkflowStart, trackWorkflowComplete, trackWorkflowError, trackConfidence, trackApiCall } from "@/lib/prometheus";
 
 const EMAIL_MARKETING_KEYWORDS = [
   "email", "newsletter", "marketing email", "send email", "email campaign",
@@ -3685,11 +3686,16 @@ export async function POST(req: NextRequest) {
       console.log("🧾 Full Input Data:", { goal, options });
       console.log("🌦️ Weather keywords detected");
       
+      trackWorkflowStart("weather");
+      
       const weatherWorkflow = generateWeatherWorkflow(goal);
       
       console.log("📦 Nodes to execute:", weatherWorkflow.steps.map(s => s.id));
       
       const enrichedResult = enrichWorkflow(weatherWorkflow);
+      
+      trackConfidence(88);
+      trackWorkflowComplete();
       
       console.log("🎯 FINAL WORKFLOW OUTPUT:", {
         workflowName: enrichedResult.workflowName,
@@ -3717,11 +3723,16 @@ export async function POST(req: NextRequest) {
       console.log("🧾 Full Input Data:", { goal, options });
       console.log("🌍 Travel planning keywords detected");
       
+      trackWorkflowStart("travel");
+      
       const travelWorkflow = generateTravelPlannerWorkflow(goal);
       
       console.log("📦 Nodes to execute:", travelWorkflow.steps.map(s => s.id));
       
       const enrichedResult = enrichWorkflow(travelWorkflow);
+      
+      trackConfidence(85);
+      trackWorkflowComplete();
       
       console.log("🎯 FINAL WORKFLOW OUTPUT:", {
         workflowName: enrichedResult.workflowName,
@@ -3790,6 +3801,9 @@ export async function POST(req: NextRequest) {
         ? `\n\nMaximum number of steps: ${options.maxSteps}`
         : "";
 
+    trackWorkflowStart("dynamic");
+    trackApiCall("groq");
+
     const completion = await groq.chat.completions.create({
       model: "llama-3.3-70b-versatile",
       temperature: 0.3,
@@ -3811,6 +3825,7 @@ export async function POST(req: NextRequest) {
 
     if (!workflow) {
       console.error("Failed to extract JSON from LLM response:", rawResponse);
+      trackWorkflowError("dynamic", "llm_failure");
 
       return NextResponse.json(
         {
@@ -3845,6 +3860,8 @@ export async function POST(req: NextRequest) {
 
     const finalValidation = validateWorkflow(enrichedResult);
 
+    trackWorkflowComplete();
+
     return NextResponse.json(
       {
         success: true,
@@ -3861,6 +3878,7 @@ export async function POST(req: NextRequest) {
 
   } catch (error) {
     console.error("Auto Workflow Generation Error:", error);
+    trackWorkflowError("dynamic", "api_failure");
 
     return NextResponse.json(
       {
