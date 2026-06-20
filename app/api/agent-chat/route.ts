@@ -693,7 +693,7 @@ Rules:
     };
 
     if (tool.url.includes("newsapi.org")) {
-      const topic = extractTopic(input);
+      const topic = extractTopic(finalInput || input);
       if (!topic || topic.length < 2) {
         await endTrace(traceId, { success: true, reply: "News topic extraction failed" });
         return NextResponse.json({
