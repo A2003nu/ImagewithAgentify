@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { groq } from "@/config/GroqModel";
 import { trackApiCall, trackConfidence } from "@/lib/prometheus";
+import { startTrace, endTrace } from "@/lib/langsmith";
 
 const parseConfidence = (raw: string): { output: string; confidence: number; reason: string } => {
   const defaultResult = {
@@ -52,6 +53,7 @@ const safeGroqCall = async (messages: any[]) => {
 };
 
 export async function POST(req: NextRequest) {
+  let traceId: string | null = null;
   try {
     const body = await req.json();
     const { input, agentToolConfig, userInputData } = body;
@@ -71,7 +73,14 @@ export async function POST(req: NextRequest) {
 
     console.log("✅ FINAL CLEAN INPUT:", cleanInput);
 
+    traceId = await startTrace("Agent Execution", {
+      input: cleanInput,
+      rawInput: input,
+      hasAgentConfig: !!agentToolConfig,
+    });
+
     if (!cleanInput) {
+      await endTrace(traceId, { success: false }, "No valid input provided");
       return NextResponse.json({
         success: false,
         error: "No valid input provided",
@@ -82,6 +91,7 @@ export async function POST(req: NextRequest) {
 
     if (!agentToolConfig) {
       console.error("❌ Agent config missing");
+      await endTrace(traceId, { success: false }, "Agent config missing");
       return NextResponse.json({
         success: false,
         error: "Agent config missing",
@@ -143,6 +153,7 @@ export async function POST(req: NextRequest) {
       
       console.log("🖼️ Image URL:", imageUrl);
       
+      await endTrace(traceId, { success: true, type: "image", prompt: cleanPrompt });
       return NextResponse.json({
         success: true,
         type: "image",
@@ -189,6 +200,7 @@ ${userDataInjection}
 
       const { output, confidence, reason } = parseConfidence(directResponse);
 
+      await endTrace(traceId, { success: true, mode: "direct", source: "llm", agent: primaryAgent?.id });
       return NextResponse.json({
         success: true,
         reply: output,
@@ -319,6 +331,7 @@ FORMAT:
     if (parsed?.fallback || parsed?.error?.includes("Rate limit")) {
       console.log("🛑 STOPPING WORKFLOW - USING SAFE FALLBACK");
       
+      await endTrace(traceId, { success: true, type: "debug", fallback: true });
       return NextResponse.json({
         success: true,
         type: "debug",
@@ -348,6 +361,7 @@ FORMAT:
       
       const { output, confidence, reason } = parseConfidence(responseText);
 
+      await endTrace(traceId, { success: true, source: "llm", agent: primaryAgent?.id });
       return NextResponse.json({
         success: true,
         reply: output,
@@ -364,6 +378,7 @@ FORMAT:
     // ============================
     if (!parsed.tool) {
       console.log("❌ No tool returned by LLM");
+      await endTrace(traceId, { success: false }, "No tool selected");
       return NextResponse.json({
         success: false,
         error: "No tool selected",
@@ -476,6 +491,7 @@ FORMAT:
       const imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(promptToSend)}`;
       console.log("🖼️ IMAGE URL:", imageUrl);
       
+      await endTrace(traceId, { success: true, type: "image", prompt: promptToSend, agent: primaryAgent?.id });
       return NextResponse.json({
         success: true,
         type: "image",
@@ -491,6 +507,7 @@ FORMAT:
       // Fallback if tool still invalid
       console.log("🔁 Retrying without tool...");
 
+      await endTrace(traceId, { success: false }, "Tool not found");
       return NextResponse.json({
         success: true,
         output: "Sorry, I couldn't find the correct tool. Please try again.",
@@ -504,6 +521,7 @@ FORMAT:
     // ❌ EMPTY PARAM CHECK
     // ============================
     if (Object.keys(cleanParams).length === 0) {
+      await endTrace(traceId, { success: true, reply: "Missing required details" });
       return NextResponse.json({
         success: true,
         reply: "Please provide required details.",
@@ -585,6 +603,7 @@ Rules:
 - Do NOT add any URLs
 - Do NOT add any intro or concluding text`;
       } else {
+        await endTrace(traceId, { success: true, reply: "API key required" });
         return NextResponse.json({
           success: true,
           reply: `API key required for ${tool.name}. Please provide an API key in the node settings.`,
@@ -648,6 +667,7 @@ Rules:
         }).join("\n\n");
       }
 
+      await endTrace(traceId, { success: true, source: "llm", confidence: 70 });
       return NextResponse.json({
         success: true,
         reply: fallbackText,
@@ -675,6 +695,7 @@ Rules:
     if (tool.url.includes("newsapi.org")) {
       const topic = extractTopic(input);
       if (!topic || topic.length < 2) {
+        await endTrace(traceId, { success: true, reply: "News topic extraction failed" });
         return NextResponse.json({
           success: true,
           reply: "Could not determine news topic from input.",
@@ -739,6 +760,7 @@ Rules:
 
       console.error("❌ NON-JSON RESPONSE:", text);
 
+      await endTrace(traceId, { success: false }, "Non-JSON API response");
       return NextResponse.json({
         success: true,
         reply:
@@ -752,6 +774,7 @@ Rules:
     // ❌ HANDLE API ERROR
     // ============================
     if (data?.status === "error" || data?.error) {
+      await endTrace(traceId, { success: false }, data?.error?.message || "API Error");
       return NextResponse.json({
         success: true,
         reply:
@@ -803,6 +826,7 @@ Rules:
         )
         .join("\n\n");
 
+      await endTrace(traceId, { success: true, source: "api", mode: "auto-format" });
       return NextResponse.json({
         success: true,
         reply: formatted,
@@ -838,6 +862,7 @@ ${JSON.stringify(minimalData)}
     const finalOutput = finalResponse.choices[0]?.message?.content ?? "No response";
     const { output, confidence, reason } = parseConfidence(finalOutput);
 
+    await endTrace(traceId, { success: true, source: "api", confidence, agent: primaryAgent?.id });
     return NextResponse.json({
       success: true,
       reply: output,
@@ -847,6 +872,7 @@ ${JSON.stringify(minimalData)}
     });
 
   } catch (error) {
+    await endTrace(traceId, { success: false }, error instanceof Error ? error.message : "Unknown error");
     console.error("❌ ERROR:", error);
     console.log("\n🎯 FINAL WORKFLOW OUTPUT: Error occurred");
 

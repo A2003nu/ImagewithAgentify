@@ -7,6 +7,7 @@ import {
   AGENT_DEFINITIONS,
 } from "@/types/WorkflowType";
 import { trackWorkflowStart, trackWorkflowComplete, trackWorkflowError, trackConfidence, trackApiCall } from "@/lib/prometheus";
+import { startTrace, endTrace } from "@/lib/langsmith";
 
 const EMAIL_MARKETING_KEYWORDS = [
   "email", "newsletter", "marketing email", "send email", "email campaign",
@@ -3393,11 +3394,14 @@ CRITICAL: Always emphasize professional medical consultation.`
 };
 
 export async function POST(req: NextRequest) {
+  let traceId: string | null = null;
   try {
     const body = await req.json();
     const { goal, options } = body as { goal: string; options?: WorkflowOptions };
+    traceId = await startTrace("Auto Workflow Generation", { goal, hasOptions: !!options });
 
     if (!goal || typeof goal !== "string") {
+      await endTrace(traceId, { success: false }, "Goal is required and must be a string");
       return NextResponse.json(
         {
           success: false,
@@ -3413,6 +3417,8 @@ export async function POST(req: NextRequest) {
       const emailWorkflow = generateEmailMarketingWorkflow(goal);
       
       const enrichedResult = enrichWorkflow(emailWorkflow);
+
+      await endTrace(traceId, { success: true, workflowType: "email-marketing", workflowName: enrichedResult.workflowName });
       
       return NextResponse.json(
         {
@@ -3436,6 +3442,8 @@ export async function POST(req: NextRequest) {
       const resumeWorkflow = generateResumeScreeningWorkflow(goal, jobRole);
       
       const enrichedResult = enrichWorkflow(resumeWorkflow);
+
+      await endTrace(traceId, { success: true, workflowType: "resume-screening", workflowName: enrichedResult.workflowName });
       
       return NextResponse.json(
         {
@@ -3472,6 +3480,8 @@ export async function POST(req: NextRequest) {
         steps: enrichedResult.steps.length,
         agents: enrichedResult.agents.length
       });
+
+      await endTrace(traceId, { success: true, workflowType: "customer-complaint", workflowName: enrichedResult.workflowName });
       
       return NextResponse.json(
         {
@@ -3506,6 +3516,8 @@ export async function POST(req: NextRequest) {
           steps: enrichedResult.steps.length,
           agents: enrichedResult.agents.length
         });
+
+        await endTrace(traceId, { success: true, workflowType: "viral-reel", workflowName: enrichedResult.workflowName });
         
         return NextResponse.json(
           {
@@ -3537,6 +3549,8 @@ export async function POST(req: NextRequest) {
         steps: enrichedResult.steps.length,
         agents: enrichedResult.agents.length
       });
+
+      await endTrace(traceId, { success: true, workflowType: "reel-script", workflowName: enrichedResult.workflowName });
       
       return NextResponse.json(
         {
@@ -3569,6 +3583,8 @@ export async function POST(req: NextRequest) {
         steps: enrichedResult.steps.length,
         agents: enrichedResult.agents.length
       });
+
+      await endTrace(traceId, { success: true, workflowType: "social-media-post", workflowName: enrichedResult.workflowName });
       
       return NextResponse.json(
         {
@@ -3601,6 +3617,8 @@ export async function POST(req: NextRequest) {
         steps: enrichedResult.steps.length,
         agents: enrichedResult.agents.length
       });
+
+      await endTrace(traceId, { success: true, workflowType: "image-generation", workflowName: enrichedResult.workflowName });
       
       return NextResponse.json(
         {
@@ -3633,6 +3651,8 @@ export async function POST(req: NextRequest) {
         steps: enrichedResult.steps.length,
         agents: enrichedResult.agents.length
       });
+
+      await endTrace(traceId, { success: true, workflowType: "study-planner", workflowName: enrichedResult.workflowName });
       
       return NextResponse.json(
         {
@@ -3665,6 +3685,8 @@ export async function POST(req: NextRequest) {
         steps: enrichedResult.steps.length,
         agents: enrichedResult.agents.length
       });
+
+      await endTrace(traceId, { success: true, workflowType: "code-debugging", workflowName: enrichedResult.workflowName });
       
       return NextResponse.json(
         {
@@ -3702,6 +3724,8 @@ export async function POST(req: NextRequest) {
         steps: enrichedResult.steps.length,
         agents: enrichedResult.agents.length
       });
+
+      await endTrace(traceId, { success: true, workflowType: "weather", workflowName: enrichedResult.workflowName });
       
       return NextResponse.json(
         {
@@ -3739,6 +3763,8 @@ export async function POST(req: NextRequest) {
         steps: enrichedResult.steps.length,
         agents: enrichedResult.agents.length
       });
+
+      await endTrace(traceId, { success: true, workflowType: "travel-planner", workflowName: enrichedResult.workflowName });
       
       return NextResponse.json(
         {
@@ -3771,6 +3797,8 @@ export async function POST(req: NextRequest) {
         steps: enrichedResult.steps.length,
         agents: enrichedResult.agents.length
       });
+
+      await endTrace(traceId, { success: true, workflowType: "medical-report", workflowName: enrichedResult.workflowName });
       
       return NextResponse.json(
         {
@@ -3826,6 +3854,7 @@ export async function POST(req: NextRequest) {
     if (!workflow) {
       console.error("Failed to extract JSON from LLM response:", rawResponse);
       trackWorkflowError("dynamic", "llm_failure");
+      await endTrace(traceId, { success: false }, "Invalid JSON response from LLM");
 
       return NextResponse.json(
         {
@@ -3842,6 +3871,7 @@ export async function POST(req: NextRequest) {
 
     if (!validationResult.isValid) {
       console.error("Workflow validation failed:", validationResult.errors);
+      await endTrace(traceId, { success: false }, "Workflow validation failed");
 
       return NextResponse.json(
         {
@@ -3861,6 +3891,7 @@ export async function POST(req: NextRequest) {
     const finalValidation = validateWorkflow(enrichedResult);
 
     trackWorkflowComplete();
+    await endTrace(traceId, { success: true, workflowType: "dynamic", workflowName: enrichedResult.workflowName, steps: enrichedResult.steps.length });
 
     return NextResponse.json(
       {
@@ -3877,6 +3908,7 @@ export async function POST(req: NextRequest) {
     );
 
   } catch (error) {
+    await endTrace(traceId, { success: false }, error instanceof Error ? error.message : "Unknown error");
     console.error("Auto Workflow Generation Error:", error);
     trackWorkflowError("dynamic", "api_failure");
 

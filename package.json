@@ -23,6 +23,7 @@
     "embla-carousel-react": "^8.6.0",
     "groq-sdk": "^1.1.1",
     "input-otp": "^1.4.2",
+    "langsmith": "^0.7.10",
     "lucide-react": "^0.575.0",
     "moment": "^2.30.1",
     "next": "15.5.6",
